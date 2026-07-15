@@ -1,0 +1,29 @@
+appId: com.manchi.agent
+productName: Manchi
+directories:
+  buildResources: resources
+files:
+  - '!**/.vscode/*'
+  - '!src/*'
+  - '!electron.vite.config.{js,ts,mjs,cjs}'
+  - '!{.eslintignore,.eslintrc.cjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
+  - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
+
+# Bundle the PyInstaller-built backend as an extra resource
+extraResources:
+  - from: ../../backend/dist/manchi-backend
+    to: backend
+    filter:
+      - '**/*'
+      - '!**/.env'
+      - '!**/settings.json'
+      - '!**/llm_config.json'
+      - '!**/*.tmp'
+
+win:
+  target:
+    - nsis
+  icon: resources/icon.png
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
