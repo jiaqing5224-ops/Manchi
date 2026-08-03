@@ -9,7 +9,7 @@
 SmartOrch（智能编排）页面目前有 10 个内置动作类型，硬编码在前端（SmartOrch.vue 的 `actionTypes` 数组 + v-if 参数表单）和后端（actions.py 的 `ACTION_REGISTRY`）中。用户希望能够：
 
 1. 在 Chat 中让 AI 生成自定义的编排组件
-2. 每个组件是独立的 Python 文件，遵循标准接口
+2. 每个组件是一个独立文件夹（含 manifest.json + component.py），遵循标准接口
 3. 组件支持导入/导出（zip 分享）
 4. 组件有依赖管理（每个组件有自己的 requirements.txt）
 5. 参数可通过编排向导 UI 动态配置
@@ -24,7 +24,9 @@ SmartOrch（智能编排）页面目前有 10 个内置动作类型，硬编码�
 ├── registry.json                # 自动生成的元数据索引
 ├── requirements.txt             # 全局合并的依赖列表
 ├── install_deps.py              # 自动安装缺失依赖的脚本
-└── <component_name>.py          # 每个组件是一个独立的 .py 文件
+└── <component_name>/            # 每个组件一个文件夹（文件夹名 == manifest.name）
+    ├── manifest.json            # 组件元数据
+    └── component.py             # 组件逻辑
 
 后端内置组件目录（随后端代码分发）：
 backend/app/components/builtin/
@@ -57,23 +59,27 @@ backend/app/components/builtin/
 **系统组件**（随后端代码分发，不可删除）：
 ```
 backend/app/components/builtin/
-├── ai_extract.py
-├── ai_extract.manifest.json
-├── export_excel.py
-├── export_excel.manifest.json
-└── ... (10 个内置动作全部重构为此格式)
+├── ai_extract/
+│   ├── ai_extract.manifest.json
+│   └── ai_extract.py
+├── export_excel/
+│   ├── export_excel.manifest.json
+│   └── export_excel.py
+└── ... (10 个内置动作全部重构为此格式，每个动作一个文件夹)
 ```
 
-**个人组件**（用户目录下，可导入/导出/删除）：
+**个人组件**（用户目录下，可导入/导出/删除，**一个文件夹对应一个组件**）：
 ```
 ~/Documents/Manchi/components/
 ├── registry.json                    # 自动生成的元数据索引
 ├── requirements.txt                 # 全局合并的依赖列表
 ├── install_deps.py                  # 自动安装缺失依赖的脚本
-├── my_component.py                  # 组件代码文件
-├── my_component.manifest.json       # 组件元数据配置
-├── another_component.py             # 另一个组件
-└── another_component.manifest.json
+├── my_component/                    # 组件文件夹（名 == manifest.name）
+│   ├── manifest.json                # 组件元数据配置
+│   └── component.py                 # 组件代码文件
+└── another_component/               # 另一个组件
+    ├── manifest.json
+    └── component.py
 ```
 
 两种组件的 `manifest.json` 结构完全一致，唯一区别是 `source` 字段取值不同（`"system"` vs `"custom"`）。
@@ -273,22 +279,140 @@ if __name__ == "__main__":
 
 **新文件：** `backend/app/services/plugin_manager.py`
 
-`PluginManager` 类：
+`PluginManager` 类（**一个文件夹对应一个组件**：`components/<name>/manifest.json` + `components/<name>/component.py`）：
 
 | 方法 | 说明 |
 |------|------|
-| `discover_components()` | 扫描 `~/Documents/Manchi/components/` 目录中的 .py 文件及对应 manifest |
-| `get_component_meta(name)` | 返回解析后的组件元数据 |
-| `run_component(name, params, context_data)` | 动态导入并执行组件 |
-| `export_component(name)` | 将组件打包为 zip 字节流 |
-| `import_component(zip_bytes)` | 导入 zip 包，注册组件 |
-| `list_components(category)` | 列出组件（可选筛选 system/custom） |
-| `install_dependencies()` | pip 安装缺失依赖 |
+| `discover_components()` | 扫描 `~/Documents/Manchi/components/` 下每个子文件夹，读取其中的 `manifest.json`，返回 `name -> manifest` |
+| `get_component_meta(name)` | 返回某组件的解析后元数据 |
+| `run_component(name, params, context)` | 动态导入 `<name>/component.py` 并调用 `run(params, context)` |
+| `export_component(name)` | 把 `<name>/` 整个文件夹打包为 zip 字节流 |
+| `import_component(zip_bytes)` | 解压 zip 到 `components/<name>/`，并把 `requires` 合并进全局 `requirements.txt` |
+| `list_components(category)` | 列出组件（按 manifest 的 `source` 筛选 system/custom） |
+| `install_dependencies()` | pip 安装全局 `requirements.txt` 中缺失的依赖 |
 
 **懒加载 + 缓存策略：**
-- 只在首次请求或文件变更时重新扫描
-- 组件导入后缓存模块对象，避免重复 import 开销
-- 监听文件 mtime 变化自动刷新缓存
+- 只在首次请求或文件变更时重新扫描目录
+- 组件模块按 `(路径, mtime)` 缓存，mtime 不变则复用已导入的模块对象，避免重复 import
+- 文件 mtime 变化自动失效对应缓存
+
+**加载伪代码（folder-based）：**
+```python
+import importlib.util
+import json
+import os
+import zipfile
+import io
+from pathlib import Path
+
+COMPONENTS_DIR = Path(os.environ.get(
+    "MANCHI_COMPONENTS",
+    os.path.expanduser("~/Documents/Manchi/components"),
+))
+GLOBAL_REQS = COMPONENTS_DIR / "requirements.txt"
+
+_module_cache: dict[str, tuple[float, object]] = {}  # name -> (mtime, module)
+
+
+def discover_components() -> dict[str, dict]:
+    """扫描 components/<name>/manifest.json，返回 name -> manifest。"""
+    result: dict[str, dict] = {}
+    if not COMPONENTS_DIR.is_dir():
+        return result
+    for folder in sorted(COMPONENTS_DIR.iterdir()):
+        mj = folder / "manifest.json"
+        if folder.is_dir() and mj.exists():
+            meta = json.loads(mj.read_text(encoding="utf-8"))
+            # 文件夹名须等于 manifest.name
+            if meta.get("name") == folder.name:
+                result[folder.name] = meta
+    return result
+
+
+def _load_module(name: str):
+    """按 mtime 缓存动态导入 <name>/component.py。"""
+    py_path = COMPONENTS_DIR / name / "component.py"
+    mtime = py_path.stat().st_mtime
+    cached = _module_cache.get(name)
+    if cached and cached[0] == mtime:
+        return cached[1]
+    spec = importlib.util.spec_from_file_location(f"_manchi_{name}", str(py_path))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)  # type: ignore[union-attr]
+    _module_cache[name] = (mtime, mod)
+    return mod
+
+
+def run_component(name: str, params: dict, context: dict):
+    mod = _load_module(name)
+    if not hasattr(mod, "run"):
+        raise ValueError(f"组件 {name} 缺少 run() 函数")
+    return mod.run(params or {}, context)
+
+
+def export_component(name: str) -> bytes:
+    """把 <name>/ 整个文件夹打包成 zip。"""
+    src = COMPONENTS_DIR / name
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for f in src.rglob("*"):
+            if f.is_file():
+                zf.write(f, arcname=f.relative_to(src))
+    return buf.getvalue()
+
+
+def import_component(zip_bytes: bytes) -> str:
+    """解压 zip 到 components/<name>/，并合并依赖。"""
+    with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+        # 从压缩包内 manifest 推断组件名
+        names = zf.namelist()
+        manifest_entry = next((n for n in names if n.endswith("manifest.json")), None)
+        if manifest_entry is None:
+            raise ValueError("zip 内缺少 manifest.json")
+        # 兼容根目录直接放 manifest.json 或 <name>/manifest.json 两种布局
+        top = manifest_entry.split("/")[0] if "/" in manifest_entry else "."
+        meta = json.loads(zf.read(manifest_entry))
+        name = meta["name"]
+        dest = COMPONENTS_DIR / name
+        dest.mkdir(parents=True, exist_ok=True)
+        # 统一解压为 <name>/manifest.json + <name>/component.py
+        for n in names:
+            data = zf.read(n)
+            rel = n[len(top) + 1:] if (top != "." and n.startswith(top + "/")) else n
+            if not rel:
+                continue
+            (dest / rel).parent.mkdir(parents=True, exist_ok=True)
+            (dest / rel).write_bytes(data)
+    _merge_requires(meta.get("requires", []), name)
+    return name
+
+
+def _merge_requires(requires: list[str], name: str) -> None:
+    """把组件依赖去重合并进全局 requirements.txt（带来源注释）。"""
+    existing: list[str] = []
+    if GLOBAL_REQS.exists():
+        existing = GLOBAL_REQS.read_text(encoding="utf-8").splitlines()
+    base = [l for l in existing if not l.strip().startswith("#") and l.strip()]
+    for pkg in requires:
+        if pkg and pkg not in base:
+            existing.append(pkg)
+            existing.append(f"# 来自组件: {name}")
+    GLOBAL_REQS.write_text("\n".join(existing) + "\n", encoding="utf-8")
+
+
+def install_dependencies() -> None:
+    """只装全局 requirements.txt 中缺失的依赖（diff 模式）。"""
+    if not GLOBAL_REQS.exists():
+        return
+    import importlib.util, subprocess, sys
+    for line in GLOBAL_REQS.read_text(encoding="utf-8").splitlines():
+        pkg = line.split("#")[0].strip()
+        if not pkg:
+            continue
+        top = pkg.split("==")[0].split(">=")[0].split("<")[0].strip()
+        if importlib.util.find_spec(top.replace("-", "_")) is None:
+            subprocess.run([sys.executable, "-m", "pip", "install", pkg], check=False)
+```
 
 ### 3.2 组件 API 端点
 
@@ -431,8 +555,8 @@ def run_action(action_config, ctx):
 
 Tool 处理器逻辑：
 1. 验证代码包含 `run()` 函数
-2. 创建 `~/Documents/Manchi/components/{name}.py`
-3. 创建对应的 `{name}.manifest.json`
+2. 创建文件夹 `~/Documents/Manchi/components/{name}/`
+3. 在其中写入 `component.py` 与 `manifest.json`
 4. 将依赖合并到全局 requirements.txt
 5. 运行 `install_deps.py`
 6. 返回组件元数据

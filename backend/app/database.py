@@ -133,6 +133,7 @@ def init_db():
     import app.models.rule  # noqa: F401
     import app.models.conversation  # noqa: F401
     import app.models.setting  # noqa: F401
+    import app.models.knowledge  # noqa: F401
 
     Base.metadata.create_all(bind=engine)
     _migrate_rules_table()

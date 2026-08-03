@@ -1,0 +1,42 @@
+{
+    "name": "excel_workload_export",
+    "display_name": "导出本周工时",
+    "description": "读取工时 Excel（默认开发资源管理.xlsx 的周计划主表），按姓名筛选并提取本周工时列，导出为工时记录.xlsx。所有路径/姓名均为参数，无硬编码。",
+    "version": "1.0.0",
+    "author": "",
+    "source": "custom",
+    "type": "standalone",
+    "input_requirement": "none",
+    "output_type": "any",
+    "requires": ["openpyxl"],
+    "params": {
+        "file_path": {
+            "type": "file",
+            "label": "源 Excel 路径",
+            "default": "",
+            "required": true,
+            "description": "工时源文件绝对路径（如开发资源管理.xlsx）"
+        },
+        "sheet_name": {
+            "type": "string",
+            "label": "工作表名",
+            "default": "周计划主表",
+            "required": false,
+            "description": "表头在第 2 行，周列形如 W28-2026"
+        },
+        "name_filter": {
+            "type": "string",
+            "label": "姓名筛选",
+            "default": "",
+            "required": false,
+            "description": "只导出该姓名；留空则导出所有人"
+        },
+        "output_filename": {
+            "type": "string",
+            "label": "输出文件名",
+            "default": "工时记录.xlsx",
+            "required": false,
+            "description": "输出文件名"
+        }
+    }
+}

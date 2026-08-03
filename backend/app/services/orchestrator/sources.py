@@ -92,6 +92,40 @@ SOURCE_REGISTRY: dict[str, Callable[[dict[str, Any], PipelineContext], Any]] = {
 }
 
 
+def read_excel_as_records(file_path: str) -> list[dict]:
+    """Parse the first sheet of an Excel workbook into list[dict] (header row).
+
+    Used by the engine to satisfy a component whose input_requirement is
+    'excel' / 'table' / 'csv': the source is read back from its original file
+    into a structured record list rather than the text representation.
+    """
+    workbook = load_workbook(file_path, data_only=True, read_only=True)
+    try:
+        ws = workbook.active or (workbook.worksheets[0] if workbook.worksheets else None)
+        if ws is None:
+            return []
+        raw_rows = list(ws.iter_rows(values_only=True))
+    finally:
+        workbook.close()
+    if not raw_rows:
+        return []
+    header: list[str] = []
+    for i, cell in enumerate(raw_rows[0]):
+        name = "" if cell is None else str(cell)
+        header.append(name if name else f"col{i}")
+    records: list[dict] = []
+    for row in raw_rows[1:]:
+        if row is None or all(c is None for c in row):
+            continue
+        records.append(
+            {
+                header[i]: ("" if (i >= len(row) or row[i] is None) else row[i])
+                for i in range(len(header))
+            }
+        )
+    return records
+
+
 def fetch_source(config: dict[str, Any], ctx: PipelineContext) -> Any:
     """Dispatch to the configured source and return its raw output."""
     source_type = config.get("type", "text")

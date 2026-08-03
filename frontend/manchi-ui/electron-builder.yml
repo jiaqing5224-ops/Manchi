@@ -9,16 +9,29 @@ files:
   - '!{.eslintignore,.eslintrc.cjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
 
-# Bundle the PyInstaller-built backend as an extra resource
+# Bundle the backend as SOURCE (not the frozen PyInstaller exe). The shipped
+# app runs the backend via a dedicated venv (see electron/main/backend.ts +
+# backend/scripts/bootstrap_runtime.py), so the Python source + requirements
+# must be present at runtime for `python -m uvicorn app.main:app`.
 extraResources:
-  - from: ../../backend/dist/manchi-backend
-    to: backend
+  - from: ../../backend/app
+    to: backend/app
     filter:
       - '**/*'
-      - '!**/.env'
-      - '!**/settings.json'
-      - '!**/llm_config.json'
-      - '!**/*.tmp'
+  - from: ../../backend/requirements.txt
+    to: backend/requirements.txt
+  - from: ../../backend/scripts
+    to: backend/scripts
+    filter:
+      - '**/*'
+  # The launcher bootstraps the venv from a bundled full CPython if present
+  # (staged by build.bat into backend/dist/python). On a clean machine with no
+  # system Python, this is what makes first-launch bootstrap possible. If the
+  # build skipped bundling, the launcher falls back to a system Python.
+  - from: ../../backend/dist/python
+    to: python
+    filter:
+      - '**/*'
 
 win:
   target:

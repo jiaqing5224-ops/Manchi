@@ -3,6 +3,7 @@ Mail router — scan Outlook, list cached mails, AI analysis.
 """
 
 import json
+import logging
 import re
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -11,11 +12,14 @@ from app.database import get_db
 from app.models.mail import Mail
 from app.models.task import Task
 from app.schemas.mail import MailResponse, AnalyzeResult, AiTaskSchema
-from app.services.outlook.mail_handler import scan_inbox
+from app.services.outlook.mail_handler import scan_inbox, open_mail_in_outlook
 from app.services.llm.client import chat_complete
 from app.services.llm.prompts import MAIL_ANALYSIS_PROMPT
 from app.services.task_service import create_task
 from app.schemas.task import TaskCreate
+from app.services.settings_store import load_settings
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/mail", tags=["mail"])
 
@@ -24,22 +28,29 @@ router = APIRouter(prefix="/api/mail", tags=["mail"])
 def scan_mails(db: Session = Depends(get_db)):
     """Scan Outlook inbox, cache new mails, and generate tasks for them."""
     try:
-        mails = scan_inbox(max_items=50)
+        try:
+            max_mails = int(load_settings().get("mail", {}).get("max_mails", 5) or 5)
+        except Exception:
+            max_mails = 5
+        mails = scan_inbox(max_items=max_mails)
     except RuntimeError as e:
         raise HTTPException(500, str(e))
 
     count = 0
     tasks_count = 0
     failed_count = 0
+    last_error = None
     for m in mails:
         existing = db.query(Mail).filter(Mail.id == m.entry_id).first()
         if existing:
             if not existing.is_processed:
                 try:
                     tasks_count += _create_missing_tasks_for_scan(db, existing)
-                except Exception:
+                except Exception as e:
                     db.rollback()
                     failed_count += 1
+                    last_error = str(e)
+                    logger.exception("扫描时分析已存在邮件失败 subject=%s", m.subject)
             continue
         mail = Mail(
             id=m.entry_id,
@@ -55,15 +66,23 @@ def scan_mails(db: Session = Depends(get_db)):
 
         try:
             tasks_count += _create_missing_tasks_for_scan(db, mail)
-        except Exception:
+        except Exception as e:
             db.rollback()
             failed_count += 1
-    return {"scanned": count, "total": len(mails), "tasks_created": tasks_count, "analysis_failed": failed_count}
+            last_error = str(e)
+            logger.exception("扫描时分析新邮件失败 subject=%s", m.subject)
+    return {
+        "scanned": count,
+        "total": len(mails),
+        "tasks_created": tasks_count,
+        "analysis_failed": failed_count,
+        "last_error": last_error,
+    }
 
 
 @router.get("")
 def list_mails(skip: int = 0, limit: int = 50, db: Session = Depends(get_db)):
-    """List cached mails, most recent first."""
+    """List cached mails, most recent first, with their AI-generated tasks."""
     mails = (
         db.query(Mail)
         .order_by(Mail.received_at.desc().nullslast())
@@ -71,16 +90,37 @@ def list_mails(skip: int = 0, limit: int = 50, db: Session = Depends(get_db)):
         .limit(limit)
         .all()
     )
-    return [MailResponse.model_validate(m) for m in mails]
+    tasks_by_mail = _tasks_by_mail(db, [m.id for m in mails])
+    result = []
+    for m in mails:
+        resp = MailResponse.model_validate(m)
+        resp.tasks = tasks_by_mail.get(m.id, [])
+        result.append(resp)
+    return result
 
 
 @router.get("/{mail_id}")
 def get_mail(mail_id: str, db: Session = Depends(get_db)):
-    """Get a single mail by ID."""
+    """Get a single mail by ID, with its AI-generated tasks."""
     mail = db.query(Mail).filter(Mail.id == mail_id).first()
     if not mail:
         raise HTTPException(404, "Mail not found")
-    return MailResponse.model_validate(mail)
+    resp = MailResponse.model_validate(mail)
+    resp.tasks = _tasks_by_mail(db, [mail_id]).get(mail_id, [])
+    return resp
+
+
+@router.post("/{mail_id}/open")
+def open_mail(mail_id: str, db: Session = Depends(get_db)):
+    """Open the original mail in the user's Outlook client (jump to source)."""
+    mail = db.query(Mail).filter(Mail.id == mail_id).first()
+    if not mail:
+        raise HTTPException(404, "Mail not found")
+    try:
+        open_mail_in_outlook(mail_id)
+    except RuntimeError as e:
+        raise HTTPException(500, str(e))
+    return {"ok": True}
 
 
 @router.post("/{mail_id}/analyze")
@@ -151,6 +191,18 @@ def _task_to_ai_schema(task: Task) -> AiTaskSchema:
         description=task.description,
         priority=task.priority,
     )
+
+
+def _tasks_by_mail(db: Session, mail_ids: list[str]) -> dict[str, list[AiTaskSchema]]:
+    """Group a mail's AI-generated tasks by source_mail_id (batched query)."""
+    result: dict[str, list[AiTaskSchema]] = {mid: [] for mid in mail_ids}
+    if not mail_ids:
+        return result
+    tasks = db.query(Task).filter(Task.source_mail_id.in_(mail_ids)).all()
+    for t in tasks:
+        if t.source_mail_id in result:
+            result[t.source_mail_id].append(_task_to_ai_schema(t))
+    return result
 
 
 def _parse_json_response(text: str) -> list[dict]:

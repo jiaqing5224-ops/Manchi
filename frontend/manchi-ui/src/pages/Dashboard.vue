@@ -46,19 +46,19 @@
         </div>
       </div>
 
-      <!-- Card 2: Mail Insight -->
-      <div class="bento-card card-mail" @click="$router.push('/mail')">
+      <!-- Card 2: Recent Tasks -->
+      <div class="bento-card card-mail" @click="$router.push('/tasks')">
         <div class="card-header">
-          <span class="card-label">最近邮件</span>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+          <span class="card-label">最近任务</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
         </div>
         <div class="card-body">
           <div class="mail-preview-list">
-            <div v-for="mail in recentMails" :key="mail.id" class="mail-item">
-              <div class="mail-sender">{{ mail.sender_email }}</div>
-              <div class="mail-subject">{{ mail.subject }}</div>
+            <div v-for="t in recentTasks" :key="t.id" class="mail-item">
+              <div class="mail-sender">{{ statusLabel(t.status) }}</div>
+              <div class="mail-subject">{{ t.title }}</div>
             </div>
-            <div v-if="recentMails.length === 0" class="mail-empty-text">暂无邮件，去邮箱扫描</div>
+            <div v-if="recentTasks.length === 0" class="mail-empty-text">暂无任务，去任务中心</div>
           </div>
         </div>
       </div>
@@ -215,6 +215,15 @@ const PLACEHOLDER_MAILS: MailItem[] = [
 
 const PRIORITY_ORDER: Record<string, number> = { high: 0, medium: 1, low: 2 }
 
+const statusMap: Record<string, string> = {
+  todo: '待办',
+  in_progress: '进行中',
+  done: '已完成'
+}
+function statusLabel(s: string): string {
+  return statusMap[s] || s
+}
+
 const tasks = ref<TaskItem[]>([])
 const mails = ref<MailItem[]>([])
 const isPlaceholder = ref(false)
@@ -227,6 +236,7 @@ const totalCount = computed(() => tasks.value.length)
 const completionRate = computed(() => totalCount.value ? Math.round(doneCount.value / totalCount.value * 100) : 0)
 const unreadCount = computed(() => mails.value.filter(m => !m.is_read).length)
 const recentMails = computed(() => mails.value.slice(0, 3))
+const recentTasks = computed(() => tasks.value.slice(0, 4))
 
 const weekNewTaskCount = computed(() => {
   const now = new Date()

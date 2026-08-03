@@ -12,6 +12,7 @@ class MailResponse(BaseModel):
     received_at: Optional[datetime] = None
     is_read: bool
     is_processed: bool
+    tasks: list["AiTaskSchema"] = []
 
     model_config = {"from_attributes": True}
 

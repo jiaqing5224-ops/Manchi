@@ -28,7 +28,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     },
     "mail": {
         "scan_interval": 15,
-        "max_mails": 50,
+        "max_mails": 5,
     },
     "system": {},
     "updated_at": None,
@@ -107,7 +107,7 @@ def to_flat_response(settings: dict[str, Any] | None = None) -> dict[str, Any]:
         "model": str(llm_settings.get("model") or ""),
         "timeout_seconds": int(llm_settings.get("timeout_seconds") or 60),
         "scan_interval": int(mail_settings.get("scan_interval") or 15),
-        "max_mails": int(mail_settings.get("max_mails") or 50),
+        "max_mails": int(mail_settings.get("max_mails") or 5),
         "updated_at": settings.get("updated_at") or _now_iso(),
         "settings_path": str(get_settings_path()),
     }

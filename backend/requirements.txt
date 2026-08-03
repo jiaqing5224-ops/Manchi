@@ -7,5 +7,6 @@ langchain-core==0.3.0
 pydantic==2.9.0
 pydantic-settings==2.5.0
 python-dotenv==1.0.0
+python-multipart==0.0.12
 pywin32==306 ; platform_system == "Windows"
 openpyxl==3.1.5

@@ -2,9 +2,15 @@
 
 from fastapi import APIRouter, HTTPException
 
-from app.schemas.setting import LlmTestResponse, SettingResponse, SettingUpdate
+from app.schemas.setting import (
+    LlmModelsRequest,
+    LlmModelsResponse,
+    LlmTestResponse,
+    SettingResponse,
+    SettingUpdate,
+)
 from app.services.settings_store import load_settings, save_flat_settings, to_flat_response
-from app.services.llm.client import test_llm_connection
+from app.services.llm.client import list_llm_models, test_llm_connection
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
@@ -27,3 +33,14 @@ def test_llm_settings() -> LlmTestResponse:
         return LlmTestResponse(**result)
     except Exception as exc:
         raise HTTPException(400, str(exc)) from exc
+
+
+@router.post("/llm-models")
+def llm_models(data: LlmModelsRequest) -> LlmModelsResponse:
+    """List models from the provider using endpoint + api_key (no model needed)."""
+    result = list_llm_models(
+        api_format=data.api_format,
+        endpoint=data.endpoint,
+        api_key=data.api_key,
+    )
+    return LlmModelsResponse(**result)

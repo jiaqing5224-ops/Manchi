@@ -3,11 +3,42 @@
     <div class="page-header">
       <h2 class="page-title">任务中心</h2>
       <div class="header-actions">
+        <button class="btn btn-ghost" @click="scanMail" :disabled="isScanning">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+          {{ isScanning ? '扫描中...' : '扫描邮件' }}
+        </button>
         <button class="btn btn-ghost" @click="showCreateDialog = true">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
           新建任务
         </button>
       </div>
+    </div>
+
+    <!-- Filter / Search bar -->
+    <div class="filter-bar">
+      <select class="filter-select" v-model="filterForm.status">
+        <option value="">全部状态</option>
+        <option value="todo">待办</option>
+        <option value="in_progress">进行中</option>
+        <option value="done">已完成</option>
+      </select>
+      <select class="filter-select" v-model="filterForm.priority">
+        <option value="">全部优先级</option>
+        <option value="high">高</option>
+        <option value="medium">中</option>
+        <option value="low">低</option>
+      </select>
+      <select class="filter-select" v-model="filterForm.date_field">
+        <option value="created_at">创建日期</option>
+        <option value="due_date">截止日期</option>
+      </select>
+      <input class="filter-input" type="date" v-model="filterForm.date_from" placeholder="起始" />
+      <span class="filter-sep">~</span>
+      <input class="filter-input" type="date" v-model="filterForm.date_to" placeholder="结束" />
+      <input class="filter-input kw" type="text" v-model="filterForm.keyword" placeholder="搜索关键词" @keyup.enter="applyFilters" />
+      <button class="btn btn-primary sm" @click="applyFilters">筛选</button>
+      <button class="btn btn-ghost sm" @click="resetFilters">重置</button>
+      <span class="filter-count" v-if="filterActive">已筛选 · {{ allTasks.length }} 条</span>
     </div>
 
     <!-- Kanban Board -->
@@ -214,6 +245,14 @@
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
         编辑
       </div>
+      <div class="context-item" @click="generateKnowledge(contextMenu.task)">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l2.4 7.4H22l-6 4.3 2.3 7.3L12 16.6 5.7 21l2.3-7.3-6-4.3h7.6z"/></svg>
+        生成知识沉淀
+      </div>
+      <div class="context-item" v-if="hasKnowledge(contextMenu.task)" @click="openKnowledge(contextMenu.task)">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+        查看知识
+      </div>
       <div class="context-divider"></div>
       <div class="context-item danger" @click="deleteTask(contextMenu.task)">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
@@ -269,6 +308,47 @@
 
     <!-- Dismiss context menu on any click outside -->
     <div v-if="contextMenu.visible" class="context-overlay" @click="contextMenu.visible = false"></div>
+
+    <!-- Knowledge Draft Dialog (editable summary before saving) -->
+    <div v-if="showKnowledgeDialog" class="dialog-overlay" @click.self="showKnowledgeDialog = false">
+      <div class="dialog dialog-wide">
+        <h3 class="dialog-title">生成知识沉淀</h3>
+        <div class="dialog-body">
+          <p class="dialog-hint">AI 已根据任务全链路生成总结，可修改后再保存。</p>
+          <textarea class="dialog-textarea kb-draft" v-model="knowledgeDraft" placeholder="知识沉淀内容"></textarea>
+        </div>
+        <div class="dialog-footer">
+          <button class="btn btn-ghost" @click="showKnowledgeDialog = false">取消</button>
+          <button class="btn btn-primary" :disabled="!knowledgeDraft.trim() || isSavingKnowledge" @click="saveKnowledge">
+            {{ isSavingKnowledge ? '保存中...' : '保存沉淀' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Task Detail Dialog (read-only full chain, opened via ?taskId deep link) -->
+    <div v-if="showDetailDialog" class="dialog-overlay" @click.self="showDetailDialog = false">
+      <div class="dialog dialog-wide">
+        <h3 class="dialog-title">{{ detailTask?.title }}</h3>
+        <div class="dialog-body">
+          <div class="detail-meta">
+            <span class="task-tag" :class="`tag-${detailTask?.status}`">{{ statusLabel(detailTask?.status || '') }}</span>
+            <span class="task-tag" :class="`tag-${detailTask?.priority}`">{{ priorityLabel(detailTask?.priority || '') }}</span>
+            <span v-if="detailTask?.source_mail_id" class="task-mail-link" title="来自邮件">📧</span>
+            <span class="task-date">{{ detailTask?.due_date ? formatDate(detailTask.due_date) : '' }}</span>
+          </div>
+          <p class="detail-desc">{{ detailTask?.description || '（无描述）' }}</p>
+          <div class="detail-actions">
+            <button class="btn btn-ghost sm" v-if="hasSource(detailTask)" @click="viewSource(detailTask)">查看原文</button>
+            <button class="btn btn-ghost sm" @click="generateKnowledge(detailTask)">生成知识沉淀</button>
+            <button class="btn btn-ghost sm" v-if="hasKnowledge(detailTask)" @click="openKnowledge(detailTask)">查看知识</button>
+          </div>
+        </div>
+        <div class="dialog-footer">
+          <button class="btn btn-ghost" @click="showDetailDialog = false">关闭</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -358,9 +438,169 @@ const groupForm = reactive({
   name: ''
 })
 
+// ---- Filters ----
+const filterForm = reactive({
+  status: '',
+  priority: '',
+  date_field: 'created_at',
+  date_from: '',
+  date_to: '',
+  keyword: ''
+})
+const filterActive = computed(() => {
+  const f = filterForm
+  return !!(f.status || f.priority || f.date_from || f.date_to || f.keyword.trim())
+})
+
+// ---- Mail scan ----
+const isScanning = ref(false)
+async function scanMail() {
+  isScanning.value = true
+  try {
+    const result = await api.post<{ scanned: number; total: number; tasks_created?: number; analysis_failed?: number; last_error?: string | null }>('/api/mail/scan', {})
+    await loadTasks()
+    await loadKnowledgeMap()
+    const created = result.tasks_created === undefined ? 0 : result.tasks_created
+    if (result.analysis_failed) {
+      const detail = result.last_error ? `\n原因：${result.last_error}` : ''
+      alert(`扫描完成：新增 ${result.scanned} 封，共 ${result.total} 封，生成 ${created} 个任务，其中 ${result.analysis_failed} 封分析失败${detail}`)
+    } else {
+      alert(`扫描完成：新增 ${result.scanned} 封，共 ${result.total} 封，生成 ${created} 个任务`)
+    }
+  } catch (e: any) {
+    alert('扫描失败: ' + e.message)
+  } finally {
+    isScanning.value = false
+  }
+}
+
+function buildTaskQuery(): string {
+  const p = new URLSearchParams()
+  const f = filterForm
+  if (f.status) p.set('status', f.status)
+  if (f.priority) p.set('priority', f.priority)
+  if (f.date_field) p.set('date_field', f.date_field)
+  if (f.date_from) p.set('date_from', f.date_from)
+  if (f.date_to) p.set('date_to', f.date_to)
+  if (f.keyword.trim()) p.set('keyword', f.keyword.trim())
+  const s = p.toString()
+  return s ? '/api/tasks?' + s : '/api/tasks'
+}
+
+async function applyFilters() {
+  await loadTasks()
+}
+async function resetFilters() {
+  filterForm.status = ''
+  filterForm.priority = ''
+  filterForm.date_field = 'created_at'
+  filterForm.date_from = ''
+  filterForm.date_to = ''
+  filterForm.keyword = ''
+  await loadTasks()
+}
+
+// ---- Knowledge precipitation ----
+const showKnowledgeDialog = ref(false)
+const knowledgeDraft = ref('')
+const isSavingKnowledge = ref(false)
+const knowledgeByTask = ref<Record<number, number>>({})  // task_id -> knowledge_id
+const draftingTaskId = ref<number | null>(null)
+
+async function loadKnowledgeMap() {
+  try {
+    const list = await api.get<{ id: number; task_id: number }[]>('/api/knowledge')
+    const map: Record<number, number> = {}
+    for (const k of list) map[k.task_id] = k.id
+    knowledgeByTask.value = map
+  } catch {
+    knowledgeByTask.value = {}
+  }
+}
+
+function hasKnowledge(task: TaskItem | null): boolean {
+  return !!task && !!knowledgeByTask.value[task.id]
+}
+
+async function generateKnowledge(task: TaskItem | null) {
+  if (!task) return
+  contextMenu.visible = false
+  showDetailDialog.value = false
+  draftingTaskId.value = task.id
+  isSavingKnowledge.value = true
+  try {
+    const draft = await api.post<{ summary: string }>(`/api/knowledge/draft/${task.id}`, {})
+    knowledgeDraft.value = draft.summary
+    showKnowledgeDialog.value = true
+  } catch (e: any) {
+    alert('生成知识草稿失败: ' + e.message)
+  } finally {
+    isSavingKnowledge.value = false
+  }
+}
+
+async function saveKnowledge() {
+  if (draftingTaskId.value === null || !knowledgeDraft.value.trim()) return
+  try {
+    await api.post('/api/knowledge', {
+      task_id: draftingTaskId.value,
+      summary: knowledgeDraft.value,
+      chain_context: null
+    })
+    showKnowledgeDialog.value = false
+    knowledgeDraft.value = ''
+    draftingTaskId.value = null
+    await loadKnowledgeMap()
+  } catch (e: any) {
+    alert('保存知识沉淀失败: ' + e.message)
+  }
+}
+
+function openKnowledge(task: TaskItem | null) {
+  if (!task) return
+  const kid = knowledgeByTask.value[task.id]
+  contextMenu.visible = false
+  showDetailDialog.value = false
+  if (kid) router.push({ path: '/mail', query: { knowledgeId: String(kid) } })
+}
+
+// ---- Task detail (read-only, deep link) ----
+const showDetailDialog = ref(false)
+const detailTask = ref<TaskItem | null>(null)
+
+function openDetail(task: TaskItem | null) {
+  detailTask.value = task
+  showDetailDialog.value = task !== null
+}
+
+async function openTaskById(idStr: string) {
+  const id = Number(idStr)
+  if (!Number.isFinite(id)) return
+  let task = allTasks.value.find(t => t.id === id)
+  if (!task) {
+    try {
+      task = await api.get<TaskItem>('/api/tasks/' + id)
+    } catch {
+      task = undefined
+    }
+  }
+  openDetail(task || null)
+}
+
 onMounted(async () => {
   await loadTasks()
+  await loadKnowledgeMap()
+  const taskId = route.query.taskId
+  if (taskId) await openTaskById(String(taskId))
 })
+
+// Deep link: navigate to /tasks?taskId=... while already on the page.
+watch(
+  () => route.query.taskId,
+  (id) => {
+    if (id) openTaskById(String(id))
+  }
+)
 
 // 切换路由到任务中心时自动刷新
 watch(
@@ -375,7 +615,7 @@ watch(
 async function loadTasks() {
   try {
     const [tasks, groups] = await Promise.all([
-      api.get<TaskItem[]>('/api/tasks'),
+      api.get<TaskItem[]>(buildTaskQuery()),
       api.get<TaskGroup[]>('/api/task-groups')
     ])
     allTasks.value = tasks
@@ -530,7 +770,9 @@ function viewSource(task: TaskItem | null) {
   const type = sourceTypeOf(task)
   contextMenu.visible = false
   if (type === 'mail' && task.source_mail_id) {
-    router.push({ path: '/mail', query: { mailId: task.source_mail_id } })
+    // 原文在 Outlook 中，直接跳转（应用内不再渲染邮件正文）
+    api.post(`/api/mail/${encodeURIComponent(task.source_mail_id)}/open`, {})
+      .catch((e: any) => alert('无法在 Outlook 中打开: ' + e.message))
   } else if (type === 'text' && task.source_text) {
     sourceDialogText.value = task.source_text
     showSourceDialog.value = true
@@ -1091,5 +1333,84 @@ async function saveEditTask() {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+/* Filter bar */
+.filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 0 32px 20px;
+}
+
+.filter-select,
+.filter-input {
+  padding: 7px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-family: var(--font-sans);
+  outline: none;
+}
+
+.filter-input.kw {
+  min-width: 180px;
+  flex: 1;
+  max-width: 260px;
+}
+
+.filter-select:focus,
+.filter-input:focus {
+  border-color: var(--accent);
+}
+
+.filter-sep {
+  color: var(--text-muted);
+}
+
+.filter-count {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-left: 4px;
+}
+
+/* Knowledge draft dialog */
+.dialog-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin: 0 0 4px;
+}
+
+.kb-draft {
+  min-height: 240px;
+  resize: vertical;
+  line-height: 1.7;
+  font-family: var(--font-sans);
+}
+
+/* Task detail dialog */
+.detail-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.detail-desc {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0 0 16px;
+}
+
+.detail-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 </style>

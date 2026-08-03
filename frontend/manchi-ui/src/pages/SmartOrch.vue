@@ -2,30 +2,18 @@
   <div class="orch-page">
     <div class="page-header">
       <h2 class="page-title">智能编排</h2>
-      <button class="btn btn-primary" @click="openCreateBlank">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
-        新建规则
-      </button>
-    </div>
-
-    <!-- Template gallery -->
-    <div class="section-title">从模板创建</div>
-    <div class="template-grid">
-      <div v-for="tpl in templates" :key="tpl.key" class="template-card" @click="createFromTemplate(tpl)">
-        <div class="template-icon" :style="{ background: templateColor(tpl.key) + '18' }">
-          <svg width="18" height="18" :stroke="templateColor(tpl.key)" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-        </div>
-        <div class="template-info">
-          <div class="template-name">{{ tpl.name }}</div>
-          <div class="template-desc">{{ tpl.description }}</div>
-        </div>
-        <div class="template-arrow">→</div>
+      <div class="header-actions">
+        <button class="btn btn-ghost" @click="openComponentManager">管理组件</button>
+        <button class="btn btn-primary" @click="openCreateBlank">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+          新建规则
+        </button>
       </div>
     </div>
 
     <div class="section-title custom-title">我的规则</div>
     <div v-if="rules.length === 0" class="empty-state">
-      <p>还没有规则，从上方模板创建或点击"新建规则"</p>
+      <p>还没有规则，点击右上角"新建规则"开始创建</p>
     </div>
 
     <div class="rules-list">
@@ -179,6 +167,33 @@
                       <template v-if="a.type === 'ai_meeting_extract'">
                         <div class="param-hint">自动识别会议邀请/通知邮件，提取主题、开始/结束时间、时长。无需配置参数。</div>
                       </template>
+                      <template v-else-if="a.type === 'ai_analyze'">
+                        <label class="mini-label">分析模式</label>
+                        <select class="fld-input" v-model="a.params.mode">
+                          <option value="extract">提取结构化字段</option>
+                          <option value="summarize">摘要</option>
+                          <option value="classify">分类</option>
+                        </select>
+                        <label class="mini-label">输出格式</label>
+                        <select class="fld-input" v-model="a.params.output_format">
+                          <option value="raw">原始（列表/文本，兼容下游）</option>
+                          <option value="markdown">Markdown</option>
+                        </select>
+                        <template v-if="a.params.mode === 'extract'">
+                          <label class="mini-label">提取字段（逗号分隔）</label>
+                          <input class="fld-input" v-model="a.params.fields_text" placeholder="subject, start_time, end_time" />
+                          <label class="mini-label">附加指令（可选）</label>
+                          <textarea class="fld-textarea" v-model="a.params.prompt_extra" placeholder="如：仅提取会议邀请类邮件"></textarea>
+                        </template>
+                        <template v-else-if="a.params.mode === 'classify'">
+                          <label class="mini-label">分类标签（逗号分隔）</label>
+                          <input class="fld-input" v-model="a.params.categories_text" placeholder="紧急, 常规, 垃圾" />
+                        </template>
+                        <template v-else-if="a.params.mode === 'summarize'">
+                          <label class="mini-label">最大字数</label>
+                          <input class="fld-input" type="number" v-model.number="a.params.max_length" />
+                        </template>
+                      </template>
                       <template v-else-if="a.type === 'ai_extract'">
                         <label class="mini-label">提取字段（逗号分隔）</label>
                         <input class="fld-input" v-model="a.params.fields_text" placeholder="subject, start_time, end_time" />
@@ -193,22 +208,6 @@
                         <label class="mini-label">分类标签（逗号分隔）</label>
                         <input class="fld-input" v-model="a.params.categories_text" placeholder="紧急, 常规, 垃圾" />
                       </template>
-                      <template v-else-if="a.type === 'export_excel'">
-                        <label class="mini-label">列（逗号分隔，留空=自动）</label>
-                        <input class="fld-input" v-model="a.params.columns_text" placeholder="subject, start_time" />
-                        <label class="mini-label">文件名</label>
-                        <input class="fld-input" v-model="a.params.filename" placeholder="导出.xlsx" />
-                      </template>
-                      <template v-else-if="a.type === 'export_json'">
-                        <label class="mini-label">文件名</label>
-                        <input class="fld-input" v-model="a.params.filename" placeholder="导出.json" />
-                      </template>
-                      <template v-else-if="a.type === 'export_markdown'">
-                        <label class="mini-label">文件名</label>
-                        <input class="fld-input" v-model="a.params.filename" placeholder="导出.md" />
-                        <label class="mini-label">标题（可选）</label>
-                        <input class="fld-input" v-model="a.params.title" placeholder="如：会议报告" />
-                      </template>
                       <template v-else-if="a.type === 'create_task'">
                         <label class="mini-label">标题字段名</label>
                         <input class="fld-input" v-model="a.params.title_field" placeholder="title" />
@@ -219,22 +218,15 @@
                           <option value="low">低</option>
                         </select>
                       </template>
-                      <template v-else-if="a.type === 'excel_workload_export'">
-                        <label class="mini-label">Excel 文件路径</label>
-                        <div class="file-row">
-                          <input class="fld-input" v-model="a.params.file_path" placeholder="选择 Excel 文件..." />
-                          <button class="btn btn-ghost" @click="pickExcelFile(a)">浏览</button>
-                        </div>
-                        <label class="mini-label">工作表名</label>
-                        <input class="fld-input" v-model="a.params.sheet_name" placeholder="周计划主表" />
-                        <label class="mini-label">过滤人名（A 列匹配值）</label>
-                        <input class="fld-input" v-model="a.params.name_filter" placeholder="Cheng Jia Qing" />
-                        <label class="mini-label">输出文件名</label>
-                        <input class="fld-input" v-model="a.params.output_filename" placeholder="工时记录.xlsx" />
-                      </template>
                       <template v-else-if="a.type === 'notify'">
                         <label class="mini-label">通知消息</label>
                         <input class="fld-input" v-model="a.params.message" placeholder="编排执行完成" />
+                      </template>
+                      <template v-else-if="isCustomAction(a.type)">
+                        <ParamForm
+                          :paramsDef="componentMap[a.type] ? componentMap[a.type].params : {}"
+                          v-model="a.params"
+                        />
                       </template>
                     </component>
                   </div>
@@ -243,8 +235,13 @@
               </div>
               <div class="add-action">
                 <div class="add-action-row">
-                  <button v-for="at in actionTypes" :key="at.key" class="add-action-chip" @click="addAction(at.key)">
-                    + {{ at.label }}
+                  <button v-for="c in systemComponents" :key="c.name" class="add-action-chip" @click="addAction(c.name)">
+                    + {{ actionLabel(c.name) }}
+                  </button>
+                </div>
+                <div class="add-action-row" v-if="customComponents.length">
+                  <button v-for="c in customComponents" :key="c.name" class="add-action-chip custom-chip" @click="addCustomAction(c.name, c.params)">
+                    + ⭐ {{ c.display_name }}
                   </button>
                 </div>
               </div>
@@ -290,7 +287,7 @@
     </div>
 
     <!-- Message Dialog (replaces native alert/confirm) -->
-    <div v-if="msgBox.show" class="dialog-overlay" @click.self="msgBox.show = false">
+    <div v-if="msgBox.show" class="dialog-overlay msg-overlay" @click.self="msgBox.show = false">
       <div class="msg-dialog">
         <div class="msg-header">
           <h3 class="msg-title">{{ msgBox.title }}</h3>
@@ -302,12 +299,51 @@
         </div>
       </div>
     </div>
+
+    <!-- Component Manager -->
+    <div v-if="showManager" class="dialog-overlay" @click.self="closeComponentManager">
+      <div class="msg-dialog" style="max-width:680px; width:92%; max-height:82vh; overflow:auto;">
+        <div class="msg-header">
+          <h3 class="msg-title">管理组件</h3>
+          <button class="wizard-close" @click="closeComponentManager">×</button>
+        </div>
+        <div class="msg-body">
+          <div class="mgr-toolbar">
+            <label class="btn btn-ghost mgr-import">
+              导入组件（文件夹）
+              <input type="file" webkitdirectory @change="onImportFolder" hidden />
+            </label>
+            <label class="btn btn-ghost mgr-import">
+              导入 .zip 包
+              <input type="file" accept=".zip" @change="onImportZip" hidden />
+            </label>
+            <button class="btn btn-ghost" @click="onInstallDeps">安装依赖</button>
+            <span class="mgr-hint">自定义组件（共 {{ customComponents.length }} 个）</span>
+          </div>
+          <div v-if="customComponents.length === 0" class="mgr-empty">
+            还没有自定义组件。可在 Chat 中让 AI 生成，或点击「导入组件（文件夹）」选择一个组件目录。
+          </div>
+          <div v-for="c in customComponents" :key="c.name" class="mgr-row">
+            <div class="mgr-info">
+              <div class="mgr-name">⭐ {{ c.display_name }}</div>
+              <div class="mgr-meta">{{ c.name }} · {{ c.type }} · 输入:{{ c.input_requirement }}</div>
+              <div class="mgr-desc">{{ c.description }}</div>
+            </div>
+            <div class="mgr-actions">
+              <button class="mini-btn" @click="onExport(c.name)" title="导出">导出</button>
+              <button class="mini-btn danger" @click="onDelete(c.name)" title="删除">删除</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onActivated, reactive } from 'vue'
+import { ref, onMounted, onActivated, reactive, computed } from 'vue'
 import { api } from '@/utils/api'
+import ParamForm from '@/components/orch/ParamForm.vue'
 
 interface SourceConfig {
   type: 'mail' | 'text' | 'file'
@@ -344,15 +380,6 @@ interface RuleItem {
   last_run_message?: string
 }
 
-interface Template {
-  key: string
-  name: string
-  description: string
-  source_config: SourceConfig
-  trigger_config: TriggerConfig
-  actions_config: ActionConfig[]
-}
-
 interface RunResult {
   rule_id: number
   status: string
@@ -363,8 +390,32 @@ interface RunResult {
   finished_at: string
 }
 
+interface ParamDef {
+  type: 'string' | 'number' | 'boolean' | 'select' | 'textarea' | 'file'
+  label?: string
+  default?: any
+  required?: boolean
+  description?: string
+  options?: string[]
+}
+
+interface ComponentMeta {
+  name: string
+  display_name: string
+  description: string
+  version?: string
+  author?: string
+  source: 'system' | 'custom'
+  type: string
+  input_requirement: string
+  output_type?: string
+  requires?: string[]
+  params: Record<string, ParamDef>
+}
+
 const rules = ref<RuleItem[]>([])
-const templates = ref<Template[]>([])
+const allComponents = ref<ComponentMeta[]>([])
+const showManager = ref(false)
 const showWizard = ref(false)
 const step = ref(0)
 const editingId = ref<number | null>(null)
@@ -410,18 +461,11 @@ const triggerTypes = [
   { key: 'new_mail', label: '新邮件到达', icon: '✉' }
 ]
 
-const actionTypes = [
-  { key: 'ai_meeting_extract', label: 'AI会议提取' },
-  { key: 'ai_extract', label: 'AI提取' },
-  { key: 'ai_summarize', label: 'AI摘要' },
-  { key: 'ai_classify', label: 'AI分类' },
-  { key: 'export_excel', label: '导出Excel' },
-  { key: 'export_json', label: '导出JSON' },
-  { key: 'export_markdown', label: '导出Markdown' },
-  { key: 'create_task', label: '生成Task' },
-  { key: 'excel_workload_export', label: 'Excel工时导出' },
-  { key: 'notify', label: '通知' }
-]
+// The actual system actions surfaced in the "add action" dropdown.
+// ai_extract / ai_summarize / ai_classify are kept as registry ALIASES of
+// ai_analyze for backward-compatible rule editing, but are not re-offered as
+// new adds — ai_analyze is the single entry point for AI analysis.
+const PRIMARY_SYSTEM_ACTIONS = ['ai_analyze', 'ai_meeting_extract', 'create_task', 'notify']
 
 function defaultSourceConfig(): SourceConfig {
   return { type: 'text', content: '' }
@@ -439,7 +483,7 @@ const form = reactive({
 })
 
 onMounted(async () => {
-  await Promise.all([loadRules(), loadTemplates()])
+  await Promise.all([loadRules(), loadComponents()])
 })
 
 // keep-alive 缓存组件切回时刷新规则列表（AI 在 Chat 页面创建的规则会同步显示）
@@ -455,12 +499,45 @@ async function loadRules() {
   }
 }
 
-async function loadTemplates() {
+async function loadComponents() {
   try {
-    templates.value = await api.get<Template[]>('/api/rules/templates/list')
+    allComponents.value = await api.components.list<ComponentMeta[]>()
   } catch {
-    templates.value = []
+    allComponents.value = []
   }
+}
+
+const customComponents = computed<ComponentMeta[]>(() =>
+  allComponents.value.filter(c => c.source === 'custom')
+)
+const systemComponents = computed<ComponentMeta[]>(() =>
+  allComponents.value.filter(c => c.source === 'system' && PRIMARY_SYSTEM_ACTIONS.includes(c.name))
+)
+
+// Full name -> meta map (system + custom), used to decide system vs custom
+// rendering/serialization and to look up custom manifests.
+const componentMap = computed<Record<string, ComponentMeta>>(() =>
+  Object.fromEntries(allComponents.value.map(c => [c.name, c]))
+)
+
+function isSystemAction(type: string): boolean {
+  return componentMap.value[type]?.source === 'system'
+}
+
+function isCustomAction(type: string): boolean {
+  return !isSystemAction(type)
+}
+
+function defaultParamsFromDef(paramsDef: Record<string, ParamDef>): Record<string, any> {
+  const out: Record<string, any> = {}
+  for (const k in paramsDef) {
+    const def = paramsDef[k]
+    if (def.default !== undefined) out[k] = def.default
+    else if (def.type === 'boolean') out[k] = false
+    else if (def.type === 'number') out[k] = 0
+    else out[k] = ''
+  }
+  return out
 }
 
 function resetForm() {
@@ -475,18 +552,6 @@ function resetForm() {
 
 function openCreateBlank() {
   resetForm()
-  showWizard.value = true
-}
-
-function createFromTemplate(tpl: Template) {
-  resetForm()
-  form.name = tpl.name
-  form.description = tpl.description
-  form.source_config = JSON.parse(JSON.stringify(tpl.source_config))
-  form.trigger_config = JSON.parse(JSON.stringify(tpl.trigger_config))
-  form.actions_config = JSON.parse(JSON.stringify(tpl.actions_config))
-  // init text-encoded params for editing
-  form.actions_config.forEach(a => normalizeActionParams(a))
   showWizard.value = true
 }
 
@@ -508,6 +573,10 @@ function closeWizard() {
 }
 
 function normalizeActionParams(a: ActionConfig) {
+  if (!isSystemAction(a.type)) {
+    a.params = a.params || {}
+    return
+  }
   if (a.type === 'ai_extract') {
     if (!a.params.fields_text) {
       const f = a.params.fields
@@ -520,10 +589,15 @@ function normalizeActionParams(a: ActionConfig) {
       a.params.categories_text = Array.isArray(c) ? c.join(', ') : (c || '')
     }
   }
-  if (a.type === 'export_excel') {
-    if (!a.params.columns_text) {
-      const c = a.params.columns
-      a.params.columns_text = Array.isArray(c) ? c.join(', ') : (c || '')
+  if (a.type === 'ai_analyze') {
+    const mode = a.params.mode || 'extract'
+    if (mode === 'extract' && !a.params.fields_text && a.params.fields) {
+      const f = a.params.fields
+      a.params.fields_text = Array.isArray(f) ? f.join(', ') : (f || '')
+    }
+    if (mode === 'classify' && !a.params.categories_text && a.params.categories) {
+      const c = a.params.categories
+      a.params.categories_text = Array.isArray(c) ? c.join(', ') : (c || '')
     }
   }
 }
@@ -551,22 +625,18 @@ function setTriggerType(key: string) {
 
 function addAction(type: string) {
   const params: Record<string, any> = {}
-  if (type === 'ai_meeting_extract') { /* no params */ }
+  if (type === 'ai_analyze') { params.mode = 'extract'; params.output_format = 'raw' }
+  else if (type === 'ai_meeting_extract') { /* no params */ }
   else if (type === 'ai_extract') { params.fields_text = ''; params.prompt_extra = '' }
   else if (type === 'ai_summarize') { params.max_length = 300 }
   else if (type === 'ai_classify') { params.categories_text = '紧急, 常规, 垃圾' }
-  else if (type === 'export_excel') { params.columns_text = ''; params.filename = '' }
-  else if (type === 'export_json') { params.filename = '' }
-  else if (type === 'export_markdown') { params.filename = ''; params.title = '' }
   else if (type === 'create_task') { params.title_field = 'title'; params.priority = 'medium' }
-  else if (type === 'excel_workload_export') {
-    params.file_path = ''
-    params.sheet_name = '周计划主表'
-    params.name_filter = 'Cheng Jia Qing'
-    params.output_filename = '工时记录.xlsx'
-  }
   else if (type === 'notify') { params.message = '编排执行完成' }
   form.actions_config.push({ type, params })
+}
+
+function addCustomAction(name: string, paramsDef: Record<string, ParamDef>) {
+  form.actions_config.push({ type: name, params: defaultParamsFromDef(paramsDef || {}) })
 }
 
 function removeAction(idx: number) {
@@ -583,32 +653,36 @@ function moveAction(idx: number, dir: number) {
 
 function serializeActionParams(a: ActionConfig): ActionConfig {
   const out: ActionConfig = { type: a.type, params: {} }
-  if (a.type === 'ai_extract') {
+  if (!isSystemAction(a.type)) {
+    // custom component: params are already structured via ParamForm
+    out.params = JSON.parse(JSON.stringify(a.params || {}))
+    return out
+  }
+  if (a.type === 'ai_analyze') {
+    out.params.mode = a.params.mode || 'extract'
+    out.params.output_format = a.params.output_format || 'raw'
+    if (out.params.mode === 'extract') {
+      const fields = String(a.params.fields_text || '').split(',').map(s => s.trim()).filter(Boolean)
+      if (fields.length) out.params.fields = fields
+      if (a.params.prompt_extra) out.params.prompt_extra = a.params.prompt_extra
+    } else if (out.params.mode === 'classify') {
+      const cats = String(a.params.categories_text || '').split(',').map(s => s.trim()).filter(Boolean)
+      if (cats.length) out.params.categories = cats
+    } else if (out.params.mode === 'summarize') {
+      out.params.max_length = Number(a.params.max_length) || 300
+    }
+  } else if (a.type === 'ai_extract') {
     out.params.fields = String(a.params.fields_text || '').split(',').map(s => s.trim()).filter(Boolean)
     if (a.params.prompt_extra) out.params.prompt_extra = a.params.prompt_extra
   } else if (a.type === 'ai_classify') {
     out.params.categories = String(a.params.categories_text || '').split(',').map(s => s.trim()).filter(Boolean)
-  } else if (a.type === 'export_excel') {
-    const cols = String(a.params.columns_text || '').split(',').map(s => s.trim()).filter(Boolean)
-    if (cols.length) out.params.columns = cols
-    if (a.params.filename) out.params.filename = a.params.filename
-  } else if (a.type === 'export_json') {
-    if (a.params.filename) out.params.filename = a.params.filename
-  } else if (a.type === 'export_markdown') {
-    if (a.params.filename) out.params.filename = a.params.filename
-    if (a.params.title) out.params.title = a.params.title
+  } else if (a.type === 'ai_summarize') {
+    out.params.max_length = Number(a.params.max_length) || 300
   } else if (a.type === 'create_task') {
     out.params.title_field = a.params.title_field || 'title'
     out.params.priority = a.params.priority || 'medium'
-  } else if (a.type === 'excel_workload_export') {
-    if (a.params.file_path) out.params.file_path = a.params.file_path
-    if (a.params.sheet_name) out.params.sheet_name = a.params.sheet_name
-    if (a.params.name_filter) out.params.name_filter = a.params.name_filter
-    if (a.params.output_filename) out.params.output_filename = a.params.output_filename
   } else if (a.type === 'notify') {
     if (a.params.message) out.params.message = a.params.message
-  } else if (a.type === 'ai_summarize') {
-    out.params.max_length = Number(a.params.max_length) || 300
   }
   return out
 }
@@ -655,6 +729,79 @@ function deleteRule(id: number) {
   })
 }
 
+function openComponentManager() {
+  showManager.value = true
+  loadComponents()
+}
+
+function closeComponentManager() {
+  showManager.value = false
+}
+
+async function onImportFolder(e: Event) {
+  const input = e.target as HTMLInputElement
+  const files = input.files
+  if (!files || files.length === 0) return
+  try {
+    await api.components.importFolder(files)
+    await loadComponents()
+    showAlert('组件导入成功')
+  } catch (err: any) {
+    showAlert('导入失败: ' + (err?.message || String(err)))
+  } finally {
+    input.value = ''
+  }
+}
+
+async function onImportZip(e: Event) {
+  const input = e.target as HTMLInputElement
+  const file = input.files && input.files[0]
+  if (!file) return
+  try {
+    await api.components.importZip(file)
+    await loadComponents()
+    showAlert('组件导入成功')
+  } catch (err: any) {
+    showAlert('导入失败: ' + (err?.message || String(err)))
+  } finally {
+    input.value = ''
+  }
+}
+
+async function onExport(name: string) {
+  try {
+    const blob = await api.components.exportZip(name)
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = name + '.zip'
+    a.click()
+    URL.revokeObjectURL(url)
+  } catch (err: any) {
+    showAlert('导出失败: ' + (err?.message || String(err)))
+  }
+}
+
+async function onDelete(name: string) {
+  showConfirm(`确定删除组件 "${name}"?`, async () => {
+    try {
+      await api.components.remove(name)
+      await loadComponents()
+    } catch (err: any) {
+      showAlert('删除失败: ' + (err?.message || String(err)))
+    }
+  })
+}
+
+async function onInstallDeps() {
+  try {
+    await api.components.installDeps()
+    showAlert('依赖安装已触发，请在后端日志查看结果')
+  } catch (err: any) {
+    showAlert('安装失败: ' + (err?.message || String(err)))
+  }
+}
+
 async function runRule(rule: RuleItem) {
   if (runningId.value) return
   runningId.value = rule.id
@@ -682,11 +829,6 @@ async function pickFile() {
   if (path) form.source_config.file_path = path
 }
 
-async function pickExcelFile(action: ActionConfig) {
-  const path = await window.manchi.pickFile()
-  if (path) action.params.file_path = path
-}
-
 function sourceLabel(c: SourceConfig): string {
   if (c.type === 'mail') return `邮件(最近${c.days_range || 5}天)`
   if (c.type === 'text') return '文本'
@@ -702,23 +844,16 @@ function triggerLabel(c: TriggerConfig): string {
 }
 
 function actionLabel(t: string): string {
+  const meta = componentMap.value[t]
+  if (meta && meta.source === 'custom') return '⭐ ' + (meta.display_name || t)
   const m: Record<string, string> = {
-    ai_meeting_extract: 'AI会议提取',
+    ai_analyze: 'AI分析', ai_meeting_extract: 'AI会议提取',
     ai_extract: 'AI提取', ai_summarize: 'AI摘要', ai_classify: 'AI分类',
     export_excel: '导出Excel', export_json: '导出JSON',
     export_markdown: '导出Markdown', create_task: '生成Task',
     excel_workload_export: 'Excel工时导出', notify: '通知'
   }
   return m[t] || t
-}
-
-function templateColor(key: string): string {
-  const m: Record<string, string> = {
-    meeting_scan: '#4FC3F7', mail_classify: '#7C3AED',
-    text_summarize: '#22C55E', file_translate: '#EAB308',
-    workload_excel_export: '#F59E0B'
-  }
-  return m[key] || '#888'
 }
 
 function formatTime(s: string): string {
@@ -764,66 +899,6 @@ function formatTime(s: string): string {
 
 .custom-title {
   margin-top: 36px;
-}
-
-/* Templates */
-.template-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 10px;
-  margin-bottom: 8px;
-}
-
-.template-card {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  background: var(--bg-surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  padding: 14px;
-  cursor: pointer;
-  transition: all var(--transition-base);
-}
-
-.template-card:hover {
-  border-color: var(--accent);
-  background: var(--bg-elevated);
-  transform: translateY(-1px);
-}
-
-.template-icon {
-  width: 36px;
-  height: 36px;
-  border-radius: var(--radius-sm);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.template-info {
-  flex: 1;
-  min-width: 0;
-}
-
-.template-name {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin-bottom: 2px;
-}
-
-.template-desc {
-  font-size: 11px;
-  color: var(--text-muted);
-  line-height: 1.4;
-}
-
-.template-arrow {
-  color: var(--text-muted);
-  font-size: 18px;
-  flex-shrink: 0;
 }
 
 /* Rules list */
@@ -997,6 +1072,12 @@ function formatTime(s: string): string {
   align-items: center;
   justify-content: center;
   z-index: 100;
+}
+
+/* Global alert/confirm must always sit above other dialogs (e.g. the
+   component-manager modal), otherwise it renders behind them. */
+.msg-overlay {
+  z-index: 200;
 }
 
 .wizard {
@@ -1550,5 +1631,107 @@ function formatTime(s: string): string {
   background: var(--bg-hover, rgba(255,255,255,0.04));
   border-radius: var(--radius-sm, 6px);
   line-height: 1.5;
+}
+
+/* Header actions (manage components button) */
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Custom component add-action chip */
+.custom-chip {
+  border-color: var(--accent);
+  color: var(--accent);
+  border-style: solid;
+  background: var(--accent-glow, rgba(99, 102, 241, 0.08));
+}
+
+.custom-chip:hover {
+  color: var(--bg-primary);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+/* Component manager dialog */
+.mgr-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+
+.mgr-import {
+  cursor: pointer;
+  padding: 8px 16px;
+}
+
+.mgr-import input[type="file"] {
+  display: none;
+}
+
+.mgr-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-left: auto;
+}
+
+.mgr-empty {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.mgr-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 24px;
+  border-bottom: 1px solid var(--border);
+}
+
+.mgr-row:last-child {
+  border-bottom: none;
+}
+
+.mgr-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.mgr-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 3px;
+}
+
+.mgr-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: var(--font-mono, monospace);
+  margin-bottom: 3px;
+}
+
+.mgr-desc {
+  font-size: 11px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.mgr-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
 }
 </style>

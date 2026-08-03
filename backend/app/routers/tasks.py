@@ -16,8 +16,24 @@ router = APIRouter(prefix="/api/tasks", tags=["tasks"])
 
 
 @router.get("")
-def list_tasks(status: str | None = None, db: Session = Depends(get_db)):
-    tasks = task_service.list_tasks(db, status=status)
+def list_tasks(
+    status: str | None = None,
+    priority: str | None = None,
+    keyword: str | None = None,
+    date_field: str = "created_at",
+    date_from: str | None = None,
+    date_to: str | None = None,
+    db: Session = Depends(get_db),
+):
+    tasks = task_service.list_tasks(
+        db,
+        status=status,
+        priority=priority,
+        keyword=keyword,
+        date_field=date_field,
+        date_from=date_from,
+        date_to=date_to,
+    )
     return [TaskResponse.model_validate(t) for t in tasks]
 
 

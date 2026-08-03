@@ -1,0 +1,28 @@
+{
+    "name": "export_markdown",
+    "display_name": "导出 Markdown",
+    "description": "将上游数据渲染为 Markdown 文档写入产物目录，并透传数据给下一节点。",
+    "version": "1.0.0",
+    "author": "",
+    "source": "custom",
+    "type": "output",
+    "input_requirement": "any",
+    "output_type": "any",
+    "requires": [],
+    "params": {
+        "title": {
+            "type": "string",
+            "label": "标题",
+            "default": "",
+            "required": false,
+            "description": "Markdown 文档的一级标题"
+        },
+        "filename": {
+            "type": "string",
+            "label": "文件名",
+            "default": "",
+            "required": false,
+            "description": "输出 Markdown 文件名，留空则自动生成"
+        }
+    }
+}

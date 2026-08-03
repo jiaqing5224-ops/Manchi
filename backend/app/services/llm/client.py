@@ -5,7 +5,7 @@ import httpx
 from openai import OpenAI
 from sqlalchemy.orm import Session
 
-from app.services.settings_store import get_llm_settings
+from app.services.settings_store import get_llm_settings, _normalize_api_format
 
 SYSTEM_PROMPT = (
     "You are Manchi, a helpful desktop AI assistant. "
@@ -256,6 +256,87 @@ def test_llm_connection() -> dict:
     }
 
 
+def list_llm_models(
+    api_format: Optional[str] = None,
+    endpoint: Optional[str] = None,
+    api_key: Optional[str] = None,
+) -> dict:
+    """Fetch available models from the provider.
+
+    Only requires endpoint + api_key — the model name is NOT required, so this
+    can be called before the user has picked a model. Falls back to the saved
+    settings when any argument is omitted. Returns {ok, models, message}.
+    """
+    settings = get_llm_settings()
+    fmt = _normalize_api_format(api_format) if api_format else settings["api_format"]
+    ep = (endpoint or "").strip() or settings["endpoint"]
+    key = (api_key or "").strip() or settings["api_key"]
+    timeout = int(settings.get("timeout_seconds") or 60)
+
+    if not ep:
+        return {"ok": False, "models": [], "message": "请先填写接口地址"}
+    if not key:
+        return {"ok": False, "models": [], "message": "请先填写 API Key"}
+
+    cfg = {"api_format": fmt, "endpoint": ep, "api_key": key, "timeout_seconds": timeout}
+
+    try:
+        if fmt == "anthropic_messages":
+            models = _list_anthropic_models(cfg)
+        else:
+            models = _list_openai_models(cfg)
+        if not models:
+            return {"ok": False, "models": [], "message": "未能获取到模型列表，请手动输入模型名"}
+        return {"ok": True, "models": models, "message": f"已获取 {len(models)} 个模型"}
+    except Exception as e:
+        return {"ok": False, "models": [], "message": f"获取模型列表失败：{e}"}
+
+
+def _list_openai_models(cfg: dict) -> list[str]:
+    """List models via the OpenAI-compatible /models endpoint."""
+    base_url = _normalize_openai_base_url(cfg["endpoint"])
+    http_client = httpx.Client(timeout=cfg["timeout_seconds"])
+    client = OpenAI(api_key=cfg["api_key"], base_url=base_url, http_client=http_client)
+    page = client.models.list()
+    ids = [m.id for m in page]
+    return _rank_models(ids)
+
+
+def _rank_models(ids: list[str]) -> list[str]:
+    """Sort chat-capable models first, then alphabetically (case-insensitive)."""
+    hints = (
+        "gpt", "claude", "deepseek", "qwen", "llama", "chat", "instruct",
+        "gemini", "moonshot", "kimi", "yi-", "mistral", "command",
+    )
+
+    def score(model_id: str) -> tuple[int, str]:
+        low = model_id.lower()
+        is_chat = any(h in low for h in hints)
+        return (0 if is_chat else 1, low)
+
+    return sorted(ids, key=score)
+
+
+def _list_anthropic_models(cfg: dict) -> list[str]:
+    """List models via Anthropic's GET /models endpoint."""
+    url = _anthropic_models_url(cfg["endpoint"])
+    headers = {
+        "x-api-key": cfg["api_key"],
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json",
+    }
+    with httpx.Client(timeout=cfg["timeout_seconds"]) as client:
+        resp = client.get(url, headers=headers)
+        resp.raise_for_status()
+        data = resp.json()
+    models = [
+        m["id"]
+        for m in data.get("data", [])
+        if isinstance(m, dict) and m.get("id")
+    ]
+    return sorted(models)
+
+
 def _require_llm_settings() -> dict:
     cfg = get_llm_settings()
     missing = []
@@ -283,6 +364,15 @@ def _anthropic_messages_url(endpoint: str) -> str:
     if endpoint.endswith("/messages"):
         return endpoint
     return f"{endpoint}/messages"
+
+
+def _anthropic_models_url(endpoint: str) -> str:
+    endpoint = endpoint.rstrip("/")
+    if endpoint.endswith("/messages"):
+        endpoint = endpoint[: -len("/messages")]
+    if endpoint.endswith("/v1"):
+        return f"{endpoint}/models"
+    return f"{endpoint}/models"
 
 
 def _anthropic_chat_complete(

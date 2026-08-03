@@ -119,6 +119,33 @@ def scan_inbox(max_items: int = 50) -> list[OutlookMail]:
         pythoncom.CoUninitialize()
 
 
+def open_mail_in_outlook(entry_id: str) -> bool:
+    """
+    Open the original mail in the user's Outlook client via COM.
+
+    Manchi caches only a preview/subject; the full message lives in Outlook,
+    so "view original" should jump to Outlook rather than re-rendering it in-app.
+    Raises RuntimeError if Outlook/COM is unavailable.
+    """
+    try:
+        import win32com.client  # noqa: F811
+        import pythoncom
+    except ImportError as e:
+        raise RuntimeError(f"pywin32 未安装，无法访问 Outlook: {e}") from e
+
+    pythoncom.CoInitialize()
+    try:
+        outlook = win32com.client.Dispatch("Outlook.Application").GetNamespace("MAPI")
+        mail_item = outlook.GetItemFromID(entry_id)
+        mail_item.Display()
+        return True
+    except Exception as e:
+        logger.error("open_mail_in_outlook failed for %s: %s", entry_id, e)
+        raise RuntimeError(f"无法在 Outlook 中打开邮件: {e}") from e
+    finally:
+        pythoncom.CoUninitialize()
+
+
 def scan_inbox_range(
     start: datetime, end: datetime, max_items: int = 500
 ) -> list[OutlookMail]:

@@ -48,7 +48,7 @@ def health():
 
 
 # ---- Routers ----
-from app.routers import chat, mail, tasks, rules, settings, meeting, task_groups  # noqa: E402
+from app.routers import chat, mail, tasks, rules, settings, meeting, task_groups, components, knowledge  # noqa: E402
 
 app.include_router(chat.router)
 app.include_router(mail.router)
@@ -57,3 +57,5 @@ app.include_router(rules.router)
 app.include_router(settings.router)
 app.include_router(meeting.router)
 app.include_router(task_groups.router)
+app.include_router(components.router)
+app.include_router(knowledge.router)

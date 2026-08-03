@@ -38,6 +38,22 @@ async function request<T>(endpoint: string, options: RequestOptions = {}): Promi
   return response.json()
 }
 
+async function postImport(fd: FormData): Promise<any> {
+  const res = await fetch(`${API_BASE}/api/components/import`, { method: 'POST', body: fd })
+  if (!res.ok) {
+    const raw = await res.text().catch(() => '')
+    let detail = raw
+    try {
+      const parsed = JSON.parse(raw)
+      if (parsed && typeof parsed.detail === 'string') detail = parsed.detail
+    } catch {
+      // keep raw text
+    }
+    throw new Error(detail || `导入失败: ${res.status}`)
+  }
+  return res.json()
+}
+
 export const api = {
   get<T>(endpoint: string) {
     return request<T>(endpoint)
@@ -53,6 +69,36 @@ export const api = {
 
   delete<T>(endpoint: string) {
     return request<T>(endpoint, { method: 'DELETE' })
+  },
+
+  components: {
+    list<T = any[]>(): Promise<T> {
+      return request<T>('/api/components')
+    },
+    remove(name: string): Promise<void> {
+      return request<void>(`/api/components/${encodeURIComponent(name)}`, { method: 'DELETE' })
+    },
+    installDeps(): Promise<void> {
+      return request<void>('/api/components/install-deps', { method: 'POST', body: {} })
+    },
+    async importZip(file: File): Promise<any> {
+      const fd = new FormData()
+      fd.append('files', file)
+      return postImport(fd)
+    },
+    async importFolder(files: FileList): Promise<any> {
+      const fd = new FormData()
+      for (const f of Array.from(files)) {
+        const rel = (f as any).webkitRelativePath || f.name
+        fd.append('files', f, rel)
+      }
+      return postImport(fd)
+    },
+    async exportZip(name: string): Promise<Blob> {
+      const res = await fetch(`${API_BASE}/api/components/${encodeURIComponent(name)}/export`)
+      if (!res.ok) throw new Error('导出失败')
+      return res.blob()
+    }
   }
 }
 

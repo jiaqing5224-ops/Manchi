@@ -8,8 +8,8 @@ const routes: RouteRecordRaw[] = [
   },
   {
     path: '/mail',
-    name: 'MailAssistant',
-    component: () => import('@/pages/MailAssistant.vue')
+    name: 'KnowledgeBase',
+    component: () => import('@/pages/KnowledgeBase.vue')
   },
   {
     path: '/tasks',

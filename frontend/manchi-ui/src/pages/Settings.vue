@@ -2,7 +2,6 @@
 	<div class="settings-page">
 		<header class="settings-header">
 			<div>
-				<span class="eyebrow">Preferences</span>
 				<h1>设置</h1>
 				<p>管理启动行为、AI 模型和邮件扫描参数。</p>
 			</div>
@@ -69,10 +68,20 @@
 							<option value="anthropic_messages">Anthropic Messages</option>
 						</select>
 					</label>
-					<label class="field">
-						<span>模型</span>
-						<input v-model.trim="form.model" type="text" :placeholder="modelPlaceholder" />
-					</label>
+				<label class="field">
+					<span>模型</span>
+					<div class="model-field">
+						<select v-if="models.length" v-model="form.model" :disabled="modelsLoading">
+							<option v-if="form.model && !models.includes(form.model)" :value="form.model">{{ form.model }}（当前）</option>
+							<option v-for="m in models" :key="m" :value="m">{{ m }}</option>
+						</select>
+						<input v-else v-model.trim="form.model" type="text" :placeholder="modelPlaceholder" :disabled="modelsLoading" />
+						<button type="button" class="ghost-btn small" :disabled="modelsLoading || !form.endpoint || !form.api_key" @click="fetchModels()">
+							{{ modelsLoading ? '获取中…' : '刷新列表' }}
+						</button>
+					</div>
+					<span v-if="modelsError" class="field-hint error">{{ modelsError }}</span>
+				</label>
 					<label class="field">
 						<span>接口地址</span>
 						<input v-model.trim="form.endpoint" type="url" :placeholder="endpointPlaceholder" />
@@ -134,6 +143,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
+import { watchDebounced } from '@vueuse/core'
 import { api } from '@/utils/api'
 
 interface SettingsResponse {
@@ -161,6 +171,12 @@ interface LlmTestResponse {
 	response_preview: string
 }
 
+interface LlmModelsResponse {
+	ok: boolean
+	models: string[]
+	message: string
+}
+
 const form = reactive<SettingsForm>({
 	auto_launch: false,
 	minimize_to_tray: true,
@@ -183,6 +199,10 @@ const testMessage = ref('')
 const testOk = ref(false)
 const updatedAt = ref('')
 const settingsPath = ref('')
+
+const models = ref<string[]>([])
+const modelsLoading = ref(false)
+const modelsError = ref('')
 
 const endpointPlaceholder = computed(() => {
 	return form.api_format === 'anthropic_messages'
@@ -227,6 +247,7 @@ async function loadSettings() {
 	try {
 		const data = await api.get<SettingsResponse>('/api/settings')
 		applySettings(data)
+		fetchModels(false)
 	} catch (err) {
 		error.value = err instanceof Error ? err.message : '读取设置失败'
 	} finally {
@@ -278,6 +299,42 @@ async function testLlm() {
 	}
 }
 
+async function fetchModels(showError = true) {
+	const endpoint = form.endpoint.trim()
+	const apiKey = form.api_key.trim()
+	if (!endpoint || !apiKey) {
+		models.value = []
+		modelsError.value = ''
+		return
+	}
+	modelsLoading.value = true
+	modelsError.value = ''
+	try {
+		const data = await api.post<LlmModelsResponse>('/api/settings/llm-models', {
+			api_format: form.api_format,
+			endpoint,
+			api_key: apiKey,
+		})
+		if (data.ok && data.models.length) {
+			models.value = data.models
+		} else {
+			models.value = []
+			if (showError) modelsError.value = data.message
+		}
+	} catch (err) {
+		models.value = []
+		if (showError) modelsError.value = err instanceof Error ? err.message : '获取模型列表失败'
+	} finally {
+		modelsLoading.value = false
+	}
+}
+
+watchDebounced(
+	() => [form.endpoint, form.api_key, form.api_format],
+	() => fetchModels(false),
+	{ debounce: 700 },
+)
+
 onMounted(loadSettings)
 </script>
 
@@ -296,15 +353,6 @@ onMounted(loadSettings)
 	margin-bottom: 24px;
 }
 
-.eyebrow {
-	display: inline-flex;
-	margin-bottom: 10px;
-	color: var(--accent);
-	font: 600 12px/1 var(--font-mono);
-	letter-spacing: 0;
-	text-transform: uppercase;
-}
-
 h1,
 h2,
 p {
@@ -313,8 +361,10 @@ p {
 
 h1 {
 	font-family: var(--font-display);
-	font-size: clamp(32px, 5vw, 58px);
-	line-height: 0.95;
+	font-size: 22px;
+	font-weight: 600;
+	line-height: 1.3;
+	letter-spacing: 0;
 }
 
 .settings-header p,
@@ -399,10 +449,10 @@ h1 {
 }
 
 .settings-panel {
-	padding: 22px;
+	padding: 26px;
 	border: 1px solid var(--border);
 	border-radius: var(--radius-lg);
-	background: linear-gradient(145deg, rgba(28, 28, 42, 0.94), rgba(20, 20, 31, 0.98));
+	background: var(--bg-elevated);
 	box-shadow: var(--shadow-md);
 }
 
@@ -431,8 +481,9 @@ h1 {
 
 .panel-title h2 {
 	font-family: var(--font-display);
-	font-size: 20px;
-	line-height: 1.2;
+	font-size: 16px;
+	font-weight: 600;
+	line-height: 1.3;
 }
 
 .panel-title p {
@@ -457,6 +508,9 @@ h1 {
 .toggle-row strong,
 .field span {
 	font-size: 14px;
+	font-weight: 600;
+	color: var(--text-primary);
+	letter-spacing: 0.01em;
 }
 
 .toggle-row small {
@@ -544,6 +598,33 @@ h1 {
 
 .ai-grid {
 	grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.model-field {
+	display: flex;
+	gap: 8px;
+	align-items: center;
+}
+
+.model-field select,
+.model-field input {
+	flex: 1;
+	min-width: 0;
+}
+
+.ghost-btn.small {
+	height: 42px;
+	white-space: nowrap;
+	padding: 0 12px;
+}
+
+.field-hint {
+	font-size: 12px;
+	color: var(--text-muted);
+}
+
+.field-hint.error {
+	color: #e5484d;
 }
 
 .compact-field {

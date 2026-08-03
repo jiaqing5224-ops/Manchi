@@ -79,6 +79,7 @@ svg{width:22px;height:22px;display:block;animation:m-pulse 3s ease-in-out infini
   document.addEventListener('mousemove',function(e){if(dr)window.moveTo(wx+e.screenX-dx,wy+e.screenY-dy)});
   document.addEventListener('mouseup',function(){dr=false});
   document.addEventListener('contextmenu',function(e){e.preventDefault();console.log('MANCHI_MENU')});
+  w.addEventListener('dblclick',function(e){e.preventDefault();console.log('MANCHI_OPEN')});
 })();
 </script>
 </body>
@@ -128,6 +129,11 @@ export function createFloatingWidget(ensureWindow: () => BrowserWindow): Browser
   ww.webContents.on('context-menu', e => e.preventDefault())
   ww.webContents.on('console-message', (_e, _l, msg) => {
     if (msg === 'MANCHI_MENU' && ww) menu().popup({ window: ww })
+    else if (msg === 'MANCHI_OPEN' && ensureWindowRef) {
+      const win = ensureWindowRef()
+      win.show()
+      win.focus()
+    }
   })
   ww.loadURL(`data:text/html;base64,${Buffer.from(html('idle')).toString('base64')}`)
   ww.on('closed', () => { ww = null })

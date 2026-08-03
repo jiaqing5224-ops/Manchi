@@ -38,3 +38,16 @@ class LlmTestResponse(BaseModel):
     model: str
     message: str
     response_preview: str = ""
+
+
+class LlmModelsRequest(BaseModel):
+    """Optional overrides; when omitted the saved settings are used."""
+    api_format: Optional[ApiFormat] = None
+    endpoint: Optional[str] = None
+    api_key: Optional[str] = None
+
+
+class LlmModelsResponse(BaseModel):
+    ok: bool
+    models: list[str] = []
+    message: str = ""

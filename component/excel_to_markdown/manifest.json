@@ -1,0 +1,35 @@
+{
+    "name": "excel_to_markdown",
+    "display_name": "Excel 转 Markdown",
+    "description": "将上游解析的 Excel 数据转换为 Markdown 格式表格，支持选择列和输出到文件",
+    "version": "1.0.0",
+    "author": "",
+    "source": "custom",
+    "type": "transform",
+    "input_requirement": "excel",
+    "output_type": "text",
+    "requires": [],
+    "params": {
+        "write_to_file": {
+            "type": "boolean",
+            "label": "写入文件",
+            "default": false,
+            "required": false,
+            "description": "是否将 Markdown 结果同时写入 artifacts_dir 的产物文件"
+        },
+        "output_filename": {
+            "type": "string",
+            "label": "输出文件名",
+            "default": "excel_output.md",
+            "required": false,
+            "description": "write_to_file=true 时的文件名"
+        },
+        "columns": {
+            "type": "string",
+            "label": "选定列",
+            "default": "",
+            "required": false,
+            "description": "要输出的列名（逗号分隔），留空则输出全部列"
+        }
+    }
+}
