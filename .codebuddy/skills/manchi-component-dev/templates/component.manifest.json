@@ -1,0 +1,21 @@
+{
+    "name": "my_component",
+    "display_name": "我的组件",
+    "description": "一句话描述组件做什么",
+    "version": "1.0.0",
+    "author": "",
+    "source": "custom",
+    "type": "transform",
+    "input_requirement": "any",
+    "output_type": "any",
+    "requires": [],
+    "params": {
+        "some_param": {
+            "type": "string",
+            "label": "示例参数",
+            "default": "",
+            "required": false,
+            "description": "参数说明"
+        }
+    }
+}
