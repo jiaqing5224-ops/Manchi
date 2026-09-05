@@ -97,6 +97,6 @@ def delete_component(name: str) -> dict:
 
 @router.post("/install-deps")
 def install_deps() -> dict:
-    """Install any missing dependencies listed in the global requirements.txt."""
-    _pm.install_dependencies()
-    return {"ok": True}
+    """Install any missing dependencies + run post-install hooks (e.g. the
+    Chromium browser binary download for playwright)."""
+    return _pm.install_dependencies()

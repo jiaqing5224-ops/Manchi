@@ -165,6 +165,19 @@ class PluginManager:
         if changed:
             req_file.write_text("\n".join(existing) + "\n", encoding="utf-8")
 
+    def sync_all_requires(self) -> None:
+        """Merge every discovered component's ``requires`` into the shared
+        requirements.txt. Ensures components copied directly into the folder
+        (not via import) still get their dependencies tracked + installed."""
+        for name, meta in self.discover_components().items():
+            self._merge_requires(meta.get("requires", []) or [], name)
+
+    @staticmethod
+    def _pkg_top(pkg: str) -> str:
+        return (
+            pkg.split("==")[0].split(">=")[0].split("<")[0].strip().replace("-", "_")
+        )
+
     # ---- dependency installation ----
 
     def _runtime_python(self) -> str:
@@ -195,19 +208,55 @@ class PluginManager:
         if check.returncode != 0:
             subprocess.run([python, "-m", "pip", "install", pkg], check=False)
 
-    def install_dependencies(self) -> None:
+    def _collect_post_install(self) -> list[str]:
+        """Gather post-install shell commands from all components + built-ins.
+
+        A component may declare ``post_install: ["playwright install chromium"]``
+        in its manifest. We also auto-append the Chromium download whenever
+        ``playwright`` appears in any requirement.
+        """
+        cmds: list[str] = []
+        have_playwright = False
+        for name, meta in self.discover_components().items():
+            for c in meta.get("post_install", []) or []:
+                if c and c not in cmds:
+                    cmds.append(c)
+            for r in meta.get("requires", []) or []:
+                if self._pkg_top(r) == "playwright":
+                    have_playwright = True
+        if have_playwright and "playwright install chromium" not in cmds:
+            cmds.append("playwright install chromium")
+        return cmds
+
+    def install_dependencies(self) -> dict:
+        """Install all tracked component deps, then run post-install hooks.
+
+        Returns a summary so the UI can report what changed.
+        """
+        self.sync_all_requires()
         req_file = self.components_dir / "requirements.txt"
         if not req_file.exists():
-            return
+            return {"ok": True, "installed": [], "post_install": []}
         python = self._runtime_python()
+        installed: list[str] = []
         for line in req_file.read_text(encoding="utf-8").splitlines():
             pkg = line.split("#")[0].strip()
             if not pkg:
                 continue
-            top = (
-                pkg.split("==")[0].split(">=")[0].split("<")[0].strip().replace("-", "_")
-            )
+            top = self._pkg_top(pkg)
             try:
                 self._ensure_pkg(python, pkg, top)
+                installed.append(pkg)
             except Exception:
                 pass
+        post_install: list[str] = []
+        for cmd in self._collect_post_install():
+            try:
+                subprocess.run(
+                    [python, "-m", *cmd.split()],
+                    capture_output=True,
+                )
+                post_install.append(cmd)
+            except Exception:
+                pass
+        return {"ok": True, "installed": installed, "post_install": post_install}

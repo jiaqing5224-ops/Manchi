@@ -26,7 +26,9 @@ Validate output with the bundled script (see step 6).
 
 ## Workflow
 
-1. **Clarify the component.** Ask (or infer) the essentials:
+1. **Pick the capability `category` first** (drives the template + examples):
+   `file` (Excel/PDF/Word 读写、格式转换), `mail` (Outlook 邮件读取/分析),
+   or `web_automation` (网页抓取 / 表单填报). Then clarify the essentials:
    - What does it do, and what is its **type**? `transform` (input→output),
      `output` (write a file, pass data through), `standalone` (no input, runs
      on its own), or `source` (fetches initial data, e.g. web/file/mail fetch).
@@ -36,7 +38,10 @@ Validate output with the bundled script (see step 6).
      source capability** — the component just declares what shape it needs.
    - What **params** should be user-configurable (never hardcode these)?
    - What does it return / produce?
-2. **Pick `type` + `input_requirement`** and draft the `params` block.
+   Pick the matching sub-template: `templates/file/`,
+   `templates/mail/`, or `templates/web_automation/`.
+2. **Pick `type` + `input_requirement`** and draft the `params` block. Set
+   `category` in the manifest to match the chosen capability.
 3. **Write `component.py`** implementing `run(params: dict, context: dict) -> Any`.
    - Read ALL config from `params`. Read upstream data from
      `context["input_data"]`. Write outputs to `context["artifacts_dir"]`.
@@ -124,13 +129,44 @@ Validate output with the bundled script (see step 6).
 > 记忆口诀：**excel 进来是 list[dict]，别再读文件；重依赖放 run 里惰性 import；
 > manifest 的 params 是对象不是数组。**
 
+## 能力类别（category）
+
+`type` 是**行为角色**（输入→输出），`category` 是**能力领域**，用于分型与
+模板选择。三类：
+
+- **`file`** — Excel/PDF/Word 读写、格式互转。
+  - 读表格：`input_requirement: excel/csv/table` → `input_data` 已是
+    `list[dict]`，**直接遍历，别再读文件**；写出才需 `requires: ["openpyxl"]`
+    并在 `run()` 内惰性 `import openpyxl`。
+  - 按路径读：`input_requirement: file` + `type: standalone`，从
+    `context["source_file_path"]` 或 `params.file_path` 读。
+- **`mail`** — Outlook 邮件读取/分析（仅 Windows）。`type: source` /
+  `standalone`，`run()` 内惰性 `import win32com.client`，用 MAPI 取邮件；
+  无需 pip 依赖，但只能在 Windows + 已配置 Outlook 的环境运行。
+- **`web_automation`** — 网页抓取 / 表单填报。核心是 **browser-use**
+  （LLM 驱动的 `Agent`），需要 LLM：
+  - 用 `context["make_llm"]()` 拿到 LangChain 模型传给 `Agent(llm=...)`；
+  - `requires: ["browser-use", "playwright", "langchain-openai"]`；
+  - 在 manifest 加 `"post_install": ["playwright install chromium"]`，
+    安装流程会自动下载浏览器二进制；
+  - 也可提供 `mode: agent | scripted`：`scripted` 用 Playwright 选择器
+    直接填（确定性、无需 LLM，适合公开表单演示）。
+  - 逐行任务的指令用自然语言写进 `Agent` 的 task（参考 time_sheet_agent）。
+
 ## Examples
 
-- "做一个把文本转大写的组件" → `type: transform`, `input_requirement: text`,
-  one param `suffix`, returns uppercased text.
-- "做个抓取网页正文保存为 markdown 的组件" → `type: standalone`
-  (or `source` if it supplies the initial data), params `url`, writes a `.md`
-  to `artifacts_dir`, `requires: ["requests"]`.
+- "做一个把文本转大写的组件" → `category: file`, `type: transform`,
+  `input_requirement: text`, one param `suffix`, returns uppercased text.
+- "读一个 Excel 工时表并整理成行" → `category: file`, `type: standalone`,
+  `input_requirement: file`, `requires: ["openpyxl"]`, params `file_path`/
+  `sheet_name`, 返回 `list[dict]`。
+- "抓取网页正文保存为 markdown" → `category: web_automation`,
+  `type: source`, params `url`, 用 `requests`/`httpx` 取正文写入
+  `artifacts_dir`；若需 LLM 抽取则 `requires: ["requests"]` 并调 `llm_call`。
+- "用浏览器逐行填报网页表单" → `category: web_automation`, `type: transform`,
+  `input_requirement: table`, `requires: ["browser-use","playwright",
+  "langchain-openai"]`, `post_install: ["playwright install chromium"]`,
+  逐行构造 browser-use `Agent` 指令。
 
 ## Hard rules (non-negotiable)
 - Every variable config comes from `params`. No hardcoded paths, secrets, or

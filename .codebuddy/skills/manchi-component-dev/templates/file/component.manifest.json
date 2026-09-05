@@ -1,0 +1,29 @@
+{
+  "name": "file_component",
+  "display_name": "文件处理组件",
+  "description": "读取/写出 Excel 等文件，或做格式转换。",
+  "version": "1.0.0",
+  "author": "",
+  "source": "custom",
+  "category": "file",
+  "type": "standalone",
+  "input_requirement": "none",
+  "output_type": "table",
+  "requires": ["openpyxl"],
+  "params": {
+    "file_path": {
+      "type": "file",
+      "label": "文件路径",
+      "default": "",
+      "required": false,
+      "description": "要读取的本地文件（Excel/CSV 等）"
+    },
+    "sheet_name": {
+      "type": "string",
+      "label": "工作表名",
+      "default": "",
+      "required": false,
+      "description": "Excel 工作表名（留空取第一个）"
+    }
+  }
+}

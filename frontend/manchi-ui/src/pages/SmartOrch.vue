@@ -118,6 +118,10 @@
                 <label class="fld-label">编码</label>
                 <input class="fld-input" v-model="form.source_config.encoding" />
               </div>
+
+              <div v-else-if="form.source_config.type === 'none'" class="params-block">
+                <p class="hint">该编排不依赖外部输入源，由组件（如自定义组件自行读取文件）提供数据。无需选择数据源。</p>
+              </div>
             </div>
 
             <!-- Step 2: Trigger -->
@@ -450,6 +454,7 @@ function showConfirm(message: string, onConfirm: () => void, title = '确认'): 
 const stepDefs = ['基本信息', '输入源', '触发器', '动作链']
 
 const sourceTypes = [
+  { key: 'none', label: '无数据源', icon: '🚫' },
   { key: 'mail', label: '邮件', icon: '📧' },
   { key: 'text', label: '自定义文本', icon: '📝' },
   { key: 'file', label: '选择文件', icon: '📄' }
@@ -604,7 +609,9 @@ function normalizeActionParams(a: ActionConfig) {
 
 function setSourceType(key: string) {
   const cur = form.source_config
-  if (key === 'mail') {
+  if (key === 'none') {
+    form.source_config = { type: 'none' }
+  } else if (key === 'mail') {
     form.source_config = { type: 'mail', days_range: cur.days_range || 5, sender_filter: cur.sender_filter || '' }
   } else if (key === 'text') {
     form.source_config = { type: 'text', content: cur.content || '' }
@@ -830,6 +837,7 @@ async function pickFile() {
 }
 
 function sourceLabel(c: SourceConfig): string {
+  if (c.type === 'none') return '无数据源'
   if (c.type === 'mail') return `邮件(最近${c.days_range || 5}天)`
   if (c.type === 'text') return '文本'
   if (c.type === 'file') return '文件'

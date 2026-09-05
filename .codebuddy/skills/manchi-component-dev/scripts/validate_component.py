@@ -31,6 +31,7 @@ ALLOWED_INPUT_REQS = {
 ALLOWED_PARAM_TYPES = {
     "string", "number", "boolean", "select", "textarea", "file",
 }
+ALLOWED_CATEGORIES = {"file", "mail", "web_automation"}
 
 NAME_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 
@@ -118,6 +119,10 @@ def validate_manifest(mj: Path) -> dict | None:
     if data.get("source") not in ("system", "custom", None):
         warn("manifest.source 建议为 'system' 或 'custom'")
 
+    cat = data.get("category")
+    if cat is not None and cat not in ALLOWED_CATEGORIES:
+        warn(f"manifest.category 未知: {cat!r}（已知 {sorted(ALLOWED_CATEGORIES)}）；按通用组件处理")
+
     return data
 
 
@@ -149,10 +154,12 @@ def validate_py(py: Path, data: dict | None = None) -> None:
     # package isn't installed — the #1 cause of "component fails to run". ---
     requires = (data or {}).get("requires", []) or []
     req_norm = {
-        r.split("==")[0].split(">=")[0].split("<")[0].strip().lower() for r in requires
+        r.split("==")[0].split(">=")[0].split("<")[0].strip().lower().replace("-", "_")
+        for r in requires
     }
     HEAVY = {"pandas", "openpyxl", "numpy", "pdfplumber", "docx",
-             "requests", "playwright"}
+             "requests", "playwright", "browser_use", "langchain_openai",
+             "bs4", "lxml"}
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:

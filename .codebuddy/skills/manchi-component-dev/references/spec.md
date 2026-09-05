@@ -25,14 +25,31 @@ def run(params: dict, context: dict) -> Any:
         input_data,        # 上一步/输入源数据（已按 input_requirement 解析）
         artifacts_dir,     # 产物输出目录（唯一允许写文件的稳定位置）
         source_type, source_content, source_file_path,
+        artifacts,         # list[str]，可经 add_artifact 追加产物路径
         db,                # 可选：SQLAlchemy session
-        llm_call,          # 可选：经配置端点的 LLM 调用封装
+        llm_call,          # 经配置端点的 LLM 调用：llm_call(prompt, history=None, ...)
+        make_llm,          # 返回 LangChain 模型（browser-use 等需要 BaseChatModel 时用）
+        add_artifact,      # lambda(path)：把产物路径追加到 artifacts 列表
     }
     return: 处理后数据，作为下一步的 input_data
     """
 ```
 
-## 2. 组件类型 `type`
+## 2. 能力类别 `category`（与 `type` 正交）
+
+`type` 描述的是**行为角色**（输入→输出）；`category` 描述的是**能力领域**，
+用于 skill 分型、模板选择与前端分组。取值：
+
+| category | 能力领域 | 典型 `type`/`input_requirement` | 典型 `requires` | 注意 |
+|----------|----------|----------------------------------|------------------|------|
+| `file` | Excel/PDF/Word 读写、格式转换 | `transform`/`standalone`；`excel`/`csv`/`table` 已是 `list[dict]`，`file` 拿路径 | `openpyxl` / `python-docx` / `pdfplumber` | 表格输入**勿再读文件**；写出才需 `openpyxl` |
+| `mail` | Outlook 邮件读取/分析 | `source`/`standalone`；`mail` 是邮件对象列表 | （Windows COM，无需 pip） | 仅 Windows；惰性 `import win32com` |
+| `web_automation` | 网页抓取 / 表单填报 | `transform`/`source`；`table`/`json` 收 `list[dict]` | `browser-use` `playwright` `langchain-openai` | 需要 LLM（browser-use 驱动）；`playwright install chromium` 由安装流程自动执行 |
+
+`category` 为**可选、增量字段**：旧组件不写也完全兼容；写错值只会在
+`validate_component.py` 给出 WARNING，不会 FAIL。
+
+## 3. 组件类型 `type`
 
 | type | 是否有上游输入 | 说明 |
 |------|----------------|------|
@@ -41,7 +58,7 @@ def run(params: dict, context: dict) -> Any:
 | `standalone` | 否 | 无需输入、独立运行 |
 | `source` | 否 | 自己从外部获取初始数据（web抓取/读文件/邮件扫描） |
 
-## 3. 输入形状约束 `input_requirement`
+## 4. 输入形状约束 `input_requirement`
 
 取值：`none` | `any` | `text` | `mail` | `excel` | `csv` | `docx` | `pdf` | `json` | `table` | `file`
 
@@ -50,8 +67,9 @@ def run(params: dict, context: dict) -> Any:
 - `input_requirement: none` → 只能作为链路起点（`standalone`/`source`）。
 - `excel`/`csv`/`docx`/`pdf` 的 `input_data` 已是解析后的规整结构
   （表格→行 dict 列表；文档→文本）。
+- `web_automation` 组件常收 `table`/`json`（`list[dict]` 行），逐行驱动浏览器。
 
-## 4. manifest.json 字段
+## 5. manifest.json 字段
 
 ```json
 {
@@ -61,10 +79,12 @@ def run(params: dict, context: dict) -> Any:
   "version": "1.0.0",
   "author": "",
   "source": "custom",
+  "category": "file",
   "type": "transform",
   "input_requirement": "any",
   "output_type": "any",
   "requires": ["openpyxl"],
+  "post_install": ["playwright install chromium"],
   "params": {
     "param_name": {
       "type": "string",

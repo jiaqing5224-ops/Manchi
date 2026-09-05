@@ -1,0 +1,38 @@
+{
+  "name": "web_automation_component",
+  "display_name": "网页自动化组件",
+  "description": "用浏览器抓取网页或逐行填报表单（browser-use / Playwright）。",
+  "version": "1.0.0",
+  "author": "",
+  "source": "custom",
+  "category": "web_automation",
+  "type": "transform",
+  "input_requirement": "table",
+  "output_type": "list",
+  "requires": ["browser-use", "playwright", "langchain-openai"],
+  "post_install": ["playwright install chromium"],
+  "params": {
+    "target_url": {
+      "type": "string",
+      "label": "目标网页 URL",
+      "default": "https://demoqa.com/automation-practice-form",
+      "required": false,
+      "description": "要操作的目标网页地址"
+    },
+    "mode": {
+      "type": "select",
+      "label": "运行模式",
+      "default": "scripted",
+      "required": false,
+      "options": ["scripted", "agent"],
+      "description": "scripted=Playwright 选择器（无需 LLM）；agent=browser-use 自然语言（需 LLM）"
+    },
+    "headless": {
+      "type": "boolean",
+      "label": "无头模式",
+      "default": true,
+      "required": false,
+      "description": "是否后台无界面运行"
+    }
+  }
+}

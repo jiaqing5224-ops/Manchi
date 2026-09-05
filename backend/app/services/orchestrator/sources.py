@@ -47,6 +47,17 @@ def _fetch_text(config: dict[str, Any], ctx: PipelineContext) -> str:
     return content
 
 
+def _fetch_none(config: dict[str, Any], ctx: PipelineContext) -> None:
+    """No external data source.
+
+    Used when the first action/component supplies its own input (e.g. a custom
+    component that reads a file directly). The pipeline simply starts with no
+    source data instead of forcing the user to pick mail/text/file.
+    """
+    ctx.steps.append("无数据源：编排自行提供输入")
+    return None
+
+
 def _fetch_file(config: dict[str, Any], ctx: PipelineContext) -> str:
     """Read a local file as text, converting Excel workbooks to text tables."""
     file_path = str(config.get("file_path", "")).strip()
@@ -89,6 +100,7 @@ SOURCE_REGISTRY: dict[str, Callable[[dict[str, Any], PipelineContext], Any]] = {
     "mail": _fetch_mail,
     "text": _fetch_text,
     "file": _fetch_file,
+    "none": _fetch_none,
 }
 
 

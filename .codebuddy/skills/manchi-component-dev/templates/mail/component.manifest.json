@@ -1,0 +1,29 @@
+{
+  "name": "mail_component",
+  "display_name": "邮件处理组件",
+  "description": "读取/分析 Outlook 邮件。",
+  "version": "1.0.0",
+  "author": "",
+  "source": "custom",
+  "category": "mail",
+  "type": "source",
+  "input_requirement": "none",
+  "output_type": "list",
+  "requires": [],
+  "params": {
+    "days_range": {
+      "type": "number",
+      "label": "最近天数",
+      "default": 5,
+      "required": false,
+      "description": "扫描最近 N 天的邮件"
+    },
+    "sender_filter": {
+      "type": "string",
+      "label": "发件人过滤",
+      "default": "",
+      "required": false,
+      "description": "按发件人模糊匹配（空=不过滤）"
+    }
+  }
+}

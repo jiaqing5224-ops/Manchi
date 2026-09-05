@@ -24,6 +24,7 @@ from typing import Any, Callable
 from typing import TYPE_CHECKING
 
 from app.services.plugin_manager import PluginManager
+from app.services.llm.client import chat_complete, get_llm_settings
 
 if TYPE_CHECKING:
     from app.services.orchestrator.engine import PipelineContext
@@ -374,7 +375,72 @@ def _ctx_to_dict(ctx: PipelineContext) -> dict:
         "source_content": ctx.source_content,
         "source_file_path": ctx.source_file_path,
         "db": ctx.db,
+        "artifacts": ctx.artifacts,
+        "llm_call": _component_llm_call,
+        "make_llm": _component_make_llm,
+        "add_artifact": ctx.artifacts.append,
     }
+
+
+def _component_llm_call(
+    prompt: str,
+    history: list[dict] | None = None,
+    temperature: float = 0.0,
+    max_tokens: int = 4096,
+) -> str:
+    """LLM call exposed to custom components.
+
+    Mirrors the skill contract ``context["llm_call"](prompt, history, ...)`` and
+    routes through the user-configured LLM endpoint in settings.json.
+    """
+    return chat_complete(history or [], prompt, temperature=temperature, max_tokens=max_tokens)
+
+
+def _component_make_llm(temperature: float = 0.0, max_tokens: int = 4096):
+    """Return a LangChain chat model built from the configured LLM settings.
+
+    Used by web-automation components (e.g. browser-use) that need a LangChain
+    ``BaseChatModel`` rather than a raw text call. Raises a clear error if the
+    LLM is not configured or the required package is missing.
+    """
+    cfg = get_llm_settings()
+    endpoint = (cfg.get("endpoint") or "").strip()
+    api_key = (cfg.get("api_key") or "").strip()
+    model = (cfg.get("model") or "").strip()
+    if not endpoint or not api_key or not model:
+        raise RuntimeError(
+            "请先在设置页配置 LLM（接口地址 / API Key / 模型）后再使用需要 LLM 的组件"
+        )
+
+    api_format = cfg.get("api_format") or "openai_chat_completions"
+    base_url = endpoint.rstrip("/")
+    for suffix in ("/chat/completions",):
+        if base_url.endswith(suffix):
+            base_url = base_url[: -len(suffix)]
+
+    if api_format == "anthropic_messages":
+        try:
+            from langchain_anthropic import ChatAnthropic
+        except ImportError as exc:  # pragma: no cover
+            raise RuntimeError("缺少依赖 langchain-anthropic，请先安装") from exc
+        return ChatAnthropic(
+            model=model,
+            api_key=api_key,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+
+    try:
+        from langchain_openai import ChatOpenAI
+    except ImportError as exc:  # pragma: no cover
+        raise RuntimeError("缺少依赖 langchain-openai，请先安装") from exc
+    return ChatOpenAI(
+        model=model,
+        api_key=api_key,
+        base_url=base_url,
+        temperature=temperature,
+        max_tokens=max_tokens,
+    )
 
 
 def _custom_handler(name: str):
